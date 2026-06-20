@@ -1,8 +1,9 @@
-//! Avian physics integration for the jackdaw editor.
+//! Avian physics integration for the jackdaw editor and runtime games.
 //!
 //! Provides collider wireframe visualization, hierarchy arrows, type
-//! registration for avian3d physics components, and an interactive
-//! simulation workflow (see [`simulation`]).
+//! registration for avian3d physics components, [`PhysicsColliderBridgePlugin`]
+//! for turning [`AvianCollider`] into real [`Collider`] meshes, and an
+//! interactive simulation workflow (see [`simulation`]).
 
 use std::marker::PhantomData;
 
@@ -10,16 +11,19 @@ use avian3d::debug_render::{PhysicsGizmoExt, PhysicsGizmos};
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+pub mod collider_bridge;
 pub mod simulation;
+
+pub use collider_bridge::PhysicsColliderBridgePlugin;
 
 /// Editor-facing collider shape selector. Wraps avian's [`ColliderConstructor`]
 /// as a newtype so it lives outside avian's auto-processing pipeline (which
 /// consumes and removes `ColliderConstructor` after building `Collider`).
 ///
-/// When this component is added or changed, the editor's sync system builds
-/// a `Collider` from the inner constructor and inserts it directly. Avian's
-/// `init_collider_constructors` never fires because `ColliderConstructor`
-/// is never placed on the entity.
+/// When this component is added or changed, [`PhysicsColliderBridgePlugin`]
+/// builds a `Collider` from the inner constructor and inserts it directly.
+/// Avian's `init_collider_constructors` never fires because
+/// `ColliderConstructor` is never placed on the entity.
 ///
 /// No `#[require(RigidBody)]`: avian supports collider-on-child patterns
 /// where the rigid body lives on a parent entity, and forcing both onto

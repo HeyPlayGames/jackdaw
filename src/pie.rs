@@ -35,12 +35,15 @@ use crate::run_config::{CargoMeta, RunConfigs, resolve_build_spec};
 
 /// How many trailing stderr lines to keep from a game process, so a
 /// crash can be reported without buffering unbounded output.
-const STDERR_TAIL_LINES: usize = 40;
+const STDERR_TAIL_LINES: usize = 120;
 
 /// How long to wait for a launched child to connect back before giving
 /// up on it. A child that runs but never connects usually means its
 /// build lacks the `jackdaw_runtime/pie` feature.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Maximum payload size per [`ControlEvent::LoadSceneChunk`] message.
+const PIE_SCENE_CHUNK_BYTES: usize = 256 * 1024;
 
 /// Marker for the toolbar transport buttons. `PiePlugin` installs
 /// an `On<Add, PieButton>` observer that wires each button's
@@ -120,6 +123,8 @@ struct PendingSpawn {
 pub struct PieSession {
     children: HashMap<InstanceKey, ChildStage>,
     builds: HashMap<BuildSpec, BuildState>,
+    /// Monotonic id for each scene transfer over PIE IPC.
+    next_scene_session: u64,
 }
 
 impl Drop for PieSession {
@@ -170,6 +175,7 @@ impl Plugin for PiePlugin {
             .init_resource::<PieViewMode>()
             .init_resource::<PieInstances>()
             .init_resource::<crate::pie_projection::PieProjection>()
+            .init_resource::<crate::pie_projection::PendingEphemeralDespawns>()
             .init_resource::<crate::live_frame::LiveFrameStream>()
             .init_resource::<crate::live_edits::LiveEditLog>()
             .init_resource::<crate::live_highlight::LastHighlight>()
@@ -182,6 +188,7 @@ impl Plugin for PiePlugin {
                     crate::live_highlight::sync_selection_highlight,
                 ),
             )
+            .add_systems(PostUpdate, crate::pie_projection::flush_ephemeral_despawns)
             .add_systems(
                 OnEnter(PlayState::Stopped),
                 (
@@ -625,6 +632,117 @@ fn broadcast_control(world: &mut World, event: ControlEvent) {
     }
 }
 
+/// Push the active scene snapshot to every live PIE child over IPC.
+pub(crate) fn broadcast_pie_scene(world: &mut World) {
+    if !world
+        .non_send_resource::<PieSession>()
+        .children
+        .values()
+        .any(|stage| matches!(stage, ChildStage::Live { .. }))
+    {
+        return;
+    }
+
+    let Some((jsn, parent_path, source_label)) = crate::scene_io::pie_scene_snapshot(world) else {
+        return;
+    };
+
+    let session_id = {
+        let mut pie_session = world.non_send_resource_mut::<PieSession>();
+        let session_id = pie_session.next_scene_session;
+        pie_session.next_scene_session = pie_session.next_scene_session.saturating_add(1);
+        session_id
+    };
+
+    let mut pie_session = world.non_send_resource_mut::<PieSession>();
+    for (key, stage) in pie_session.children.iter_mut() {
+        let ChildStage::Live { transport, .. } = stage else {
+            continue;
+        };
+        if let Err(err) = send_pie_scene_on_transport(
+            transport,
+            session_id,
+            &parent_path,
+            source_label.as_deref(),
+            &jsn,
+        ) {
+            error!("PIE: {key} failed to send scene session {session_id}: {err}");
+        }
+    }
+}
+
+/// Send the active scene to one live instance (called when a child first connects).
+fn send_pie_scene_to_instance(world: &mut World, key: &InstanceKey) {
+    let Some((jsn, parent_path, source_label)) = crate::scene_io::pie_scene_snapshot(world) else {
+        warn!("PIE: {key} could not snapshot the active scene for IPC transfer");
+        return;
+    };
+
+    let session_id = {
+        let mut pie_session = world.non_send_resource_mut::<PieSession>();
+        let session_id = pie_session.next_scene_session;
+        pie_session.next_scene_session = pie_session.next_scene_session.saturating_add(1);
+        session_id
+    };
+
+    let mut pie_session = world.non_send_resource_mut::<PieSession>();
+    let Some(ChildStage::Live { transport, .. }) = pie_session.children.get_mut(key) else {
+        return;
+    };
+
+    if let Err(err) = send_pie_scene_on_transport(
+        transport,
+        session_id,
+        &parent_path,
+        source_label.as_deref(),
+        &jsn,
+    ) {
+        error!("PIE: {key} failed to send initial scene session {session_id}: {err}");
+    }
+}
+
+fn send_pie_scene_on_transport(
+    transport: &mut IpcChannelTransport,
+    session: u64,
+    parent_path: &Path,
+    source_label: Option<&str>,
+    jsn: &jackdaw_jsn::format::JsnScene,
+) -> Result<(), serde_json::Error> {
+    let json = serde_json::to_string_pretty(jsn)?;
+    let bytes = json.into_bytes();
+    let byte_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+
+    send_control_to(
+        transport,
+        ControlEvent::LoadSceneBegin {
+            session,
+            parent_path: parent_path.to_path_buf(),
+            byte_len,
+            source_label: source_label.map(str::to_owned),
+        },
+    );
+
+    for (offset, chunk) in bytes.chunks(PIE_SCENE_CHUNK_BYTES).enumerate() {
+        let offset = u64::try_from(offset.saturating_mul(PIE_SCENE_CHUNK_BYTES))
+            .unwrap_or(u64::MAX);
+        send_control_to(
+            transport,
+            ControlEvent::LoadSceneChunk {
+                session,
+                offset,
+                bytes: chunk.to_vec(),
+            },
+        );
+    }
+
+    send_control_to(transport, ControlEvent::LoadSceneEnd { session });
+    info!(
+        "PIE: sent scene session {session} ({byte_len} bytes in {} chunks)",
+        bytes.len().div_ceil(PIE_SCENE_CHUNK_BYTES)
+    );
+    Ok(())
+}
+
 /// Send a control message (live edits, frame stream start/stop) only to the
 /// focused instance's child transport. If no instance is focused, or the
 /// focused child is not yet live, the message is dropped with a debug log.
@@ -987,13 +1105,22 @@ fn poll_children(world: &mut World) {
     let children = std::mem::take(&mut world.non_send_resource_mut::<PieSession>().children);
 
     let mut survivors: HashMap<InstanceKey, ChildStage> = HashMap::with_capacity(children.len());
+    let mut send_scene_to: Vec<InstanceKey> = Vec::new();
     for (key, stage) in children {
+        let was_connecting = matches!(&stage, ChildStage::Connecting { .. });
         if let Some(next) = advance_child(&key, stage) {
+            if was_connecting && matches!(&next, ChildStage::Live { .. }) {
+                send_scene_to.push(key.clone());
+            }
             survivors.insert(key, next);
         }
     }
 
     world.non_send_resource_mut::<PieSession>().children = survivors;
+
+    for key in send_scene_to {
+        send_pie_scene_to_instance(world, &key);
+    }
 }
 
 /// Step one child's stage by value, returning the stage it should
@@ -1355,6 +1482,27 @@ fn drain_game_events(world: &mut World) {
             if let StateEvent::PickResult { entity } = &event {
                 if is_focused {
                     handle_pick_result(world, *entity);
+                }
+                continue;
+            }
+
+            // The game finished loading a new scene snapshot (initial play or
+            // save-while-playing hot reload). Drop stale mirror state so the
+            // following despawn/spawn flood does not tear down ephemerals while
+            // avian still has deferred commands targeting them.
+            if let StateEvent::SceneLoaded { session } = &event {
+                if is_focused {
+                    if let Some(buffer) = world
+                        .resource_mut::<PieInstances>()
+                        .buffers
+                        .get_mut(&key)
+                    {
+                        buffer.entities.clear();
+                    }
+                    if live_mode {
+                        crate::pie_projection::clear_projection(world);
+                    }
+                    info!("PIE: {key} game scene session {session} loaded, projection reset");
                 }
                 continue;
             }

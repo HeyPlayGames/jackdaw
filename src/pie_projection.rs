@@ -16,6 +16,49 @@ use serde::de::{DeserializeSeed, IntoDeserializer};
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PieEphemeral;
 
+/// Preview entities queued for despawn on the next frame. Ephemeral teardown
+/// during a game hot-reload can race avian's deferred mass-recompute commands
+/// if we despawn in the same frame a streamed `Collider` was removed.
+#[derive(Resource, Default, Debug)]
+pub struct PendingEphemeralDespawns(pub Vec<Entity>);
+
+/// Queue an ephemeral preview entity for despawn after deferred commands flush.
+pub(crate) fn queue_ephemeral_despawn(world: &mut World, entity: Entity) {
+    if world.get_entity(entity).is_ok() {
+        world
+            .resource_mut::<PendingEphemeralDespawns>()
+            .0
+            .push(entity);
+    }
+}
+
+/// Despawn queued ephemerals once avian's deferred inserts have applied.
+pub(crate) fn flush_ephemeral_despawns(
+    mut pending: ResMut<PendingEphemeralDespawns>,
+    mut commands: Commands,
+) {
+    for entity in pending.0.drain(..) {
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.despawn();
+        }
+    }
+}
+
+/// Test / direct-world helper matching [`flush_ephemeral_despawns`].
+#[cfg(test)]
+fn flush_pending_ephemeral_despawns_world(world: &mut World) {
+    let pending: Vec<Entity> = world
+        .resource_mut::<PendingEphemeralDespawns>()
+        .0
+        .drain(..)
+        .collect();
+    for entity in pending {
+        if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+            entity_mut.despawn();
+        }
+    }
+}
+
 /// Maps a streamed entity (game-side bits) to the preview entity representing
 /// it: an authored entity resolved via `JsnNodeId`, or an ephemeral preview
 /// entity this projector spawned. Cleared when play stops, focus changes, or
@@ -45,7 +88,15 @@ const CHILDREN_PATH: &str = "bevy_ecs::hierarchy::Children";
 /// pass (the default image is not renderable). New game builds no longer send
 /// these, but the projector refuses them regardless so an older game binary
 /// cannot crash the editor.
-const PROJECTION_SKIP_PREFIXES: &[&str] = &["bevy_camera::camera::", "bevy_camera::components::"];
+const PROJECTION_SKIP_PREFIXES: &[&str] = &[
+    "bevy_camera::camera::",
+    "bevy_camera::components::",
+    // Runtime physics on preview entities is owned by the editor's
+    // `AvianCollider` bridge on authored nodes. Applying the game's avian
+    // internals here races mass-recompute commands during hot reload.
+    "avian3d::",
+    "jackdaw_avian_integration::",
+];
 
 /// Streamed but never saved: these must reach the preview even though the
 /// save filter rejects them. The rig activation marker is how the Live
@@ -148,20 +199,18 @@ pub fn revert_preview(world: &mut World) {
 
 /// Despawn every ephemeral preview entity and clear the projection maps,
 /// without touching the authored scene.
-fn clear_projection(world: &mut World) {
+pub fn clear_projection(world: &mut World) {
     let ephemerals: Vec<Entity> = {
-        let mut q = world.query_filtered::<Entity, With<PieEphemeral>>();
-        q.iter(world).collect()
+        let mut query = world.query_filtered::<Entity, With<PieEphemeral>>();
+        query.iter(world).collect()
     };
-    for e in ephemerals {
+    for entity in ephemerals {
         // The game routinely parents authored previews under ephemerals (zone
-        // roots, network actors). `despawn` takes descendants with it, so detach
-        // the authored ones first or they die with the container and their node
-        // ids resolve to dead entities on the next replay.
-        detach_authored_descendants(world, e);
-        if let Ok(em) = world.get_entity_mut(e) {
-            em.despawn();
-        }
+        // roots, network actors). Detach the authored ones first or they die
+        // with the container and their node ids resolve to dead entities on
+        // the next replay.
+        detach_authored_descendants(world, entity);
+        queue_ephemeral_despawn(world, entity);
     }
     // Absent when the PIE plugin isn't registered (headless harnesses,
     // editors built without PIE); there is no projection to clear then.
@@ -347,16 +396,15 @@ pub fn project_event(world: &mut World, event: StateEvent) {
                 // entities are reverted on stop, not despawned here.
                 if world.get::<PieEphemeral>(preview).is_some() {
                     detach_authored_descendants(world, preview);
-                    if let Ok(e) = world.get_entity_mut(preview) {
-                        e.despawn();
-                    }
+                    queue_ephemeral_despawn(world, preview);
                 }
             }
         }
         StateEvent::Status { .. }
         | StateEvent::Log { .. }
         | StateEvent::CursorState { .. }
-        | StateEvent::PickResult { .. } => {}
+        | StateEvent::PickResult { .. }
+        | StateEvent::SceneLoaded { .. } => {}
     }
 }
 
@@ -657,6 +705,7 @@ mod tests {
     fn build_projection_world() -> (World, Entity, JsnNodeId) {
         let mut world = build_world();
         world.init_resource::<PieProjection>();
+        world.init_resource::<PendingEphemeralDespawns>();
 
         // Build a SceneJsnAst with one authored node bound to a preview entity.
         let preview_entity = world.spawn(Mutable(0)).id();
@@ -796,6 +845,7 @@ mod tests {
 
         // Despawn the ephemeral.
         project_event(&mut world, StateEvent::EntityDespawned { entity: 2 });
+        flush_pending_ephemeral_despawns_world(&mut world);
 
         // The ephemeral entity should no longer exist.
         assert!(
@@ -959,6 +1009,7 @@ mod tests {
         world.entity_mut(authored).insert(ChildOf(inner));
 
         project_event(&mut world, StateEvent::EntityDespawned { entity: 0xE1 });
+        flush_pending_ephemeral_despawns_world(&mut world);
 
         assert!(world.get_entity(outer).is_err(), "ephemeral despawned");
         assert!(
@@ -1141,6 +1192,7 @@ mod tests {
         );
 
         revert_preview(&mut world);
+        flush_pending_ephemeral_despawns_world(&mut world);
 
         // The ephemeral entity must be gone.
         assert!(

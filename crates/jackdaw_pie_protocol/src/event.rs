@@ -54,6 +54,11 @@ pub enum StateEvent {
     PickResult {
         entity: Option<u64>,
     },
+    /// The game finished loading a scene sent by the editor's chunked
+    /// [`ControlEvent::LoadScene*`] sequence.
+    SceneLoaded {
+        session: u64,
+    },
 }
 
 /// Editor-to-game messages.
@@ -102,6 +107,26 @@ pub enum ControlEvent {
     /// changes while an instance is focused.
     Highlight {
         entity: Option<u64>,
+    },
+    /// Begin a chunked scene transfer. The editor sends one or more
+    /// [`ControlEvent::LoadSceneChunk`] messages, then
+    /// [`ControlEvent::LoadSceneEnd`]. Payload is pretty-printed scene JSON.
+    LoadSceneBegin {
+        session: u64,
+        parent_path: std::path::PathBuf,
+        byte_len: u64,
+        /// Source file stem for naming the spawned scene root, when known.
+        source_label: Option<String>,
+    },
+    /// One slice of the scene JSON payload started by [`ControlEvent::LoadSceneBegin`].
+    LoadSceneChunk {
+        session: u64,
+        offset: u64,
+        bytes: Vec<u8>,
+    },
+    /// Finish a chunked scene transfer; the game assembles and loads the scene.
+    LoadSceneEnd {
+        session: u64,
     },
 }
 
@@ -201,5 +226,33 @@ mod tests {
         let ev = ControlEvent::Highlight { entity: None };
         let bytes = to_bytes(&ev).unwrap();
         assert_eq!(from_bytes::<ControlEvent>(&bytes).unwrap(), ev);
+    }
+
+    #[test]
+    fn load_scene_events_round_trip() {
+        let ev = ControlEvent::LoadSceneBegin {
+            session: 1,
+            parent_path: std::path::PathBuf::from("levels"),
+            byte_len: 4096,
+            source_label: Some("starter".into()),
+        };
+        let bytes = to_bytes(&ev).unwrap();
+        assert_eq!(from_bytes::<ControlEvent>(&bytes).unwrap(), ev);
+
+        let ev = ControlEvent::LoadSceneChunk {
+            session: 1,
+            offset: 0,
+            bytes: b"{\"scene\":[]}".to_vec(),
+        };
+        let bytes = to_bytes(&ev).unwrap();
+        assert_eq!(from_bytes::<ControlEvent>(&bytes).unwrap(), ev);
+
+        let ev = ControlEvent::LoadSceneEnd { session: 1 };
+        let bytes = to_bytes(&ev).unwrap();
+        assert_eq!(from_bytes::<ControlEvent>(&bytes).unwrap(), ev);
+
+        let ev = StateEvent::SceneLoaded { session: 1 };
+        let bytes = to_bytes(&ev).unwrap();
+        assert_eq!(from_bytes::<StateEvent>(&bytes).unwrap(), ev);
     }
 }

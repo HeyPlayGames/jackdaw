@@ -5374,6 +5374,8 @@ version = "0.4.1"
 dependencies = [
  "avian3d 0.6.1",
  "bevy",
+ "jackdaw_geometry",
+ "jackdaw_jsn",
 ]
 
 [[package]]

@@ -124,7 +124,8 @@ impl PieMirror {
             StateEvent::Status { .. }
             | StateEvent::Log { .. }
             | StateEvent::CursorState { .. }
-            | StateEvent::PickResult { .. } => {}
+            | StateEvent::PickResult { .. }
+            | StateEvent::SceneLoaded { .. } => {}
         }
     }
 
@@ -203,7 +204,8 @@ impl InstanceBuffer {
             jackdaw_pie_protocol::StateEvent::Status { .. }
             | jackdaw_pie_protocol::StateEvent::Log { .. }
             | jackdaw_pie_protocol::StateEvent::CursorState { .. }
-            | jackdaw_pie_protocol::StateEvent::PickResult { .. } => {}
+            | jackdaw_pie_protocol::StateEvent::PickResult { .. }
+            | jackdaw_pie_protocol::StateEvent::SceneLoaded { .. } => {}
         }
     }
 }

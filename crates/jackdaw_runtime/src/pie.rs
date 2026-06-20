@@ -76,6 +76,7 @@ pub fn attach_pie(app: &mut App, transport: IpcChannelTransport) {
     app.insert_non_send_resource(PieTransportRes(transport));
     app.init_resource::<PieStreamState>();
     app.init_resource::<HighlightedEntity>();
+    crate::pie_scene::init_pie_scene_transfer(app);
     // Drain control in PreUpdate, before input processing so forwarded editor
     // input lands in `ButtonInput` the same frame, and before Update where a
     // stop or restart despawns the readback entity that pacing would target.
@@ -303,6 +304,11 @@ fn apply_control(world: &mut World) {
             continue;
         };
         match event {
+            ControlEvent::LoadSceneBegin { .. }
+            | ControlEvent::LoadSceneChunk { .. }
+            | ControlEvent::LoadSceneEnd { .. } => {
+                crate::pie_scene::apply_load_scene_control(world, event);
+            }
             ControlEvent::Stop => {
                 world.write_message(AppExit::Success);
             }

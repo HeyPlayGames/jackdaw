@@ -118,6 +118,44 @@ pub fn is_scene_dirty(world: &World) -> bool {
     history.undo_stack.len() != dirty_state.undo_len_at_save
 }
 
+/// Snapshot of the active scene for Play-In-Editor IPC transfer.
+///
+/// Returns `None` when the active tab is a prefab or no project is open.
+pub fn pie_scene_snapshot(world: &mut World) -> Option<(jackdaw_jsn::format::JsnScene, PathBuf, Option<String>)> {
+    let root = world
+        .get_resource::<crate::project::ProjectRoot>()
+        .map(|project| project.root.clone())?;
+
+    let (content, tab_path) = world
+        .get_resource::<crate::scenes::Scenes>()
+        .and_then(|scenes| {
+            scenes
+                .tabs
+                .get(scenes.active)
+                .map(|tab| (&tab.content, tab.path.clone()))
+        })?;
+
+    match content {
+        crate::scenes::TabContent::Prefab(_) => {
+            warn!("PIE: active tab is a prefab; open a scene tab to play");
+            return None;
+        }
+        crate::scenes::TabContent::Scene(_) => {}
+    }
+
+    let parent_path = tab_path
+        .as_ref()
+        .and_then(|path| path.parent().map(|parent| parent.to_path_buf()))
+        .unwrap_or(root);
+
+    let source_label = tab_path
+        .as_ref()
+        .and_then(|path| path.file_stem().map(|stem| stem.to_string_lossy().into_owned()));
+
+    let jsn = scene_for_save(world);
+    return Some((jsn, parent_path, source_label));
+}
+
 /// Marker resource: a "save before new scene?" dialog is currently open.
 #[derive(Resource)]
 struct PendingNewScene;
@@ -428,6 +466,8 @@ fn save_scene_inner(world: &mut World) -> Result<(), BevyError> {
             }
         })
         .detach();
+
+    crate::pie::broadcast_pie_scene(world);
 
     // Also persist the in-memory baked navmesh (if any) to a sibling
     // `<scene>.nav` file so it survives reload. No-op when nothing is baked.

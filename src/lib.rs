@@ -65,7 +65,6 @@ pub mod navmesh;
 pub mod new_project;
 pub mod numeric_transform;
 pub mod operator_tooltip;
-pub mod physics_brush_bridge;
 pub mod physics_tool;
 pub mod pie;
 pub mod pie_menu;
@@ -336,7 +335,7 @@ impl Plugin for EditorCorePlugin {
             selection::Selected,
         >::new())
         .add_plugins(jackdaw_avian_integration::simulation::PhysicsSimulationPlugin)
-        .add_plugins(physics_brush_bridge::PhysicsBrushBridgePlugin)
+        .add_plugins(jackdaw_avian_integration::PhysicsColliderBridgePlugin)
         .add_plugins(physics_tool::PhysicsToolPlugin)
         .add_plugins(operator_tooltip::OperatorTooltipPlugin)
         .add_plugins(jackdaw_node_graph::NodeGraphPlugin)

@@ -29,15 +29,25 @@ mod pie;
 #[cfg(feature = "pie")]
 mod pie_frames;
 #[cfg(feature = "pie")]
+mod pie_scene;
+#[cfg(feature = "pie")]
 mod pie_windowless;
 #[cfg(feature = "pie")]
 pub use pie_windowless::{maybe_windowless, windowless_requested};
+#[cfg(feature = "pie")]
+pub use pie_scene::PieSceneReady;
+
+/// Systems that instantiate [`JackdawSceneRoot`] children after scene assets load.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct JackdawRuntimeSceneSystems;
 
 pub mod prelude {
     pub use crate::{
         EditorCategory, EditorDescription, EditorHidden, JackdawCatalog, JackdawCatalogPath,
-        JackdawPlugin, JackdawSceneRoot, SkipSerialization,
+        JackdawPlugin, JackdawRuntimeSceneSystems, JackdawSceneRoot, SkipSerialization,
     };
+    #[cfg(feature = "pie")]
+    pub use crate::PieSceneReady;
 }
 
 pub struct JackdawPlugin;
@@ -55,9 +65,12 @@ impl Plugin for JackdawPlugin {
             .init_resource::<JackdawCatalog>();
 
         app.add_systems(Startup, load_project_catalog);
+        app.configure_sets(Update, JackdawRuntimeSceneSystems);
         app.add_systems(
             Update,
-            (clear_modified_scene_roots, spawn_loaded_scenes).chain(),
+            (clear_modified_scene_roots, spawn_loaded_scenes)
+                .chain()
+                .in_set(JackdawRuntimeSceneSystems),
         );
 
         // When `JACKDAW_PIE` is set, open the ipc-channel link to the editor
