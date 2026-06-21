@@ -167,7 +167,7 @@ webbrowser.workspace = true
 libc = "0.2"
 
 [workspace.dependencies]
-bevy = { version = "0.18", features = [
+bevy = { version = "0.19", features = [
     "experimental_bevy_feathers",
     "serialize",
     "debug",
