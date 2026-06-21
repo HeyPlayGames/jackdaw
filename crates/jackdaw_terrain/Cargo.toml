@@ -9,7 +9,7 @@ repository = "https://github.com/jbuehler23/jackdaw"
 [dependencies]
 noise.workspace = true
 rand.workspace = true
-bevy_math = "0.18"
+bevy_math = "0.19"
 
 [lints]
 workspace = true
