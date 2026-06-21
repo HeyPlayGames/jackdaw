@@ -38,7 +38,7 @@ fn can_call_operator() {
         .query_filtered::<(), With<Panel>>()
         .iter(app.world())
         .count();
-    // TODO: why is this panel not spawned? What do I need to do in order to make it spawn?
+    // TODO: why is this panel not spawned? What is needed to make it spawn?
     assert_eq!(amount_of_panels, 0);
     assert!(!app.world_mut().contains_resource::<Marker>());
 
@@ -93,7 +93,7 @@ fn snapshot_notices_editor_state_changes() {
         .resource_scope(|world, snapshotter: Mut<ActiveSnapshotter>| snapshotter.0.capture(world));
 
     // Flip each editor-state resource the snapshot should cover.
-    *world.resource_mut::<ViewModeSettings>() = ViewModeSettings { wireframe: true };
+    world.resource_mut::<ViewModeSettings>().wireframe = true;
     *world.resource_mut::<EditMode>() = EditMode::BrushEdit(BrushEditMode::Face);
     *world.resource_mut::<ActiveTool>() = ActiveTool::Rotate;
     *world.resource_mut::<GizmoSpace>() = GizmoSpace::Local;

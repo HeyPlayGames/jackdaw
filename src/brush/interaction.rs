@@ -128,24 +128,38 @@ pub(crate) struct VertexDragState {
     pub(crate) drag_viewport: Option<Entity>,
 }
 
-/// Compute a local-space offset for brush vertex/edge drag based on mouse movement.
+/// Compute a local-space offset for brush vertex/edge drag based on mouse
+/// movement. `anchor_world` is the world position of the dragged element;
+/// the pixels-per-world calibration happens at its depth so the drag tracks
+/// the cursor exactly, even when the element is far from the brush origin.
 pub(crate) fn compute_brush_drag_offset(
     constraint: VertexDragConstraint,
     mouse_delta: Vec2,
     cam_tf: &GlobalTransform,
     camera: &Camera,
     brush_global: &GlobalTransform,
+    anchor_world: Vec3,
 ) -> Option<Vec3> {
-    let brush_pos = brush_global.translation();
-    let cam_dist = (cam_tf.translation() - brush_pos).length();
-    let scale = cam_dist * 0.003;
+    // Calibrate cursor pixels to world units against the live projection by
+    // measuring how many screen pixels one world unit spans at the dragged
+    // element's depth. Keeps the drag cursor-locked at any zoom or scale.
+    let origin_screen = camera.world_to_viewport(cam_tf, anchor_world).ok()?;
 
     let offset = match constraint {
         VertexDragConstraint::Free => {
             let cam_right = cam_tf.right().as_vec3();
             let cam_up = cam_tf.up().as_vec3();
-            let world_offset =
-                cam_right * mouse_delta.x * scale + cam_up * (-mouse_delta.y) * scale;
+            let right_screen = camera
+                .world_to_viewport(cam_tf, anchor_world + cam_right)
+                .ok()?;
+            let up_screen = camera
+                .world_to_viewport(cam_tf, anchor_world + cam_up)
+                .ok()?;
+            let px_per_world_x = (right_screen - origin_screen).length().max(1e-4);
+            let px_per_world_y = (up_screen - origin_screen).length().max(1e-4);
+            // Screen Y grows downward, so a downward cursor move is -up.
+            let world_offset = cam_right * (mouse_delta.x / px_per_world_x)
+                + cam_up * (-mouse_delta.y / px_per_world_y);
             let (_, brush_rot, _) = brush_global.to_scale_rotation_translation();
             brush_rot.inverse() * world_offset
         }
@@ -156,15 +170,18 @@ pub(crate) fn compute_brush_drag_offset(
                 VertexDragConstraint::AxisZ => Vec3::Z,
                 VertexDragConstraint::Free => unreachable!(),
             };
-            let origin_screen = camera.world_to_viewport(cam_tf, brush_pos).ok()?;
             let (_, brush_rot, _) = brush_global.to_scale_rotation_translation();
             let world_axis = brush_rot * axis_dir;
             let axis_screen = camera
-                .world_to_viewport(cam_tf, brush_pos + world_axis)
+                .world_to_viewport(cam_tf, anchor_world + world_axis)
                 .ok()?;
-            let screen_axis = (axis_screen - origin_screen).normalize_or_zero();
-            let projected = mouse_delta.dot(screen_axis);
-            axis_dir * projected * scale
+            let screen_axis = axis_screen - origin_screen;
+            let px_per_world = screen_axis.length();
+            if px_per_world < 1e-4 {
+                return Some(Vec3::ZERO);
+            }
+            let projected_px = mouse_delta.dot(screen_axis / px_per_world);
+            axis_dir * (projected_px / px_per_world)
         }
     };
     Some(offset)
@@ -358,31 +375,25 @@ pub(super) fn handle_clip_mode(
     }
 }
 
-/// Pick the closest face under the cursor on a given brush entity.
+/// Pick the closest face of `cache` under the cursor in screen space.
 fn pick_face_under_cursor(
     viewport_cursor: Vec2,
-    brush_entity: Entity,
     camera: &Camera,
     cam_tf: &GlobalTransform,
+    brush_global: &GlobalTransform,
     cache: &BrushMeshCache,
-    face_entities: &Query<(Entity, &super::BrushFaceEntity, &GlobalTransform)>,
 ) -> Option<usize> {
     let mut best_face = None;
     let mut best_depth = f32::MAX;
 
-    for (_, face_ent, face_global) in face_entities {
-        if face_ent.brush_entity != brush_entity {
-            continue;
-        }
-        let face_idx = face_ent.face_index;
-        let polygon = &cache.face_polygons[face_idx];
+    for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
         if polygon.len() < 3 {
             continue;
         }
         let screen_verts: Vec<Vec2> = polygon
             .iter()
             .filter_map(|&vi| {
-                let world = face_global.transform_point(cache.vertices[vi]);
+                let world = brush_global.transform_point(cache.vertices[vi]);
                 camera.world_to_viewport(cam_tf, world).ok()
             })
             .collect();
@@ -392,7 +403,7 @@ fn pick_face_under_cursor(
         if point_in_polygon_2d(viewport_cursor, &screen_verts) {
             let centroid: Vec3 =
                 polygon.iter().map(|&vi| cache.vertices[vi]).sum::<Vec3>() / polygon.len() as f32;
-            let world_centroid = face_global.transform_point(centroid);
+            let world_centroid = brush_global.transform_point(centroid);
             let depth = (cam_tf.translation() - world_centroid).length_squared();
             if depth < best_depth {
                 best_depth = depth;
@@ -418,7 +429,6 @@ pub(super) fn brush_face_hover(
     edit_mode: Res<EditMode>,
     keyboard: Res<ButtonInput<KeyCode>>,
     vp: crate::viewport::ViewportCursor,
-    face_entities: Query<(Entity, &super::BrushFaceEntity, &GlobalTransform)>,
     brush_selection: Res<BrushSelection>,
     brush_caches: Query<&BrushMeshCache>,
     brush_transforms: Query<&GlobalTransform>,
@@ -488,19 +498,14 @@ pub(super) fn brush_face_hover(
             let Ok(brush_global) = brush_transforms.get(brush_entity) else {
                 continue;
             };
-            for (_, face_ent, face_global) in &face_entities {
-                if face_ent.brush_entity != brush_entity {
-                    continue;
-                }
-                let face_idx = face_ent.face_index;
-                let polygon = &cache.face_polygons[face_idx];
+            for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
                 if polygon.len() < 3 {
                     continue;
                 }
                 let screen_verts: Vec<Vec2> = polygon
                     .iter()
                     .filter_map(|&vi| {
-                        let world = face_global.transform_point(cache.vertices[vi]);
+                        let world = brush_global.transform_point(cache.vertices[vi]);
                         camera.world_to_viewport(cam_tf, world).ok()
                     })
                     .collect();
@@ -512,10 +517,12 @@ pub(super) fn brush_face_hover(
                         / polygon.len() as f32;
                     let world_centroid = brush_global.transform_point(centroid);
                     let depth = (cam_tf.translation() - world_centroid).length_squared();
-                    if depth < best_depth {
+                    if depth < best_depth
+                        && let Some(authored) = cache.authored_face(face_idx)
+                    {
                         best_depth = depth;
                         best_entity = Some(brush_entity);
-                        best_face = Some(face_idx);
+                        best_face = Some(authored);
                     }
                 }
             }
@@ -542,16 +549,17 @@ pub(super) fn brush_face_hover(
             return;
         };
 
-        if let Some(face_idx) = pick_face_under_cursor(
-            viewport_cursor,
-            brush_entity,
-            camera,
-            cam_tf,
-            cache,
-            &face_entities,
-        ) {
+        let Ok(brush_global) = brush_transforms.get(brush_entity) else {
+            clear_hover(&mut hover);
+            return;
+        };
+
+        if let Some(face_idx) =
+            pick_face_under_cursor(viewport_cursor, camera, cam_tf, brush_global, cache)
+            && let Some(authored) = cache.authored_face(face_idx)
+        {
             hover.entity = Some(brush_entity);
-            hover.face_index = Some(face_idx);
+            hover.face_index = Some(authored);
             hover.vertex_index = None;
             hover.edge = None;
             hover.intent = intent;
@@ -630,10 +638,12 @@ pub(super) fn brush_vertex_edge_hover(
                     continue;
                 };
                 let dist = (screen - viewport_cursor).length();
-                if dist < best_dist {
+                if dist < best_dist
+                    && let Some(authored) = cache.authored_vert(vi)
+                {
                     best_dist = dist;
                     best_entity = Some(brush_entity);
-                    best_vi = Some(vi);
+                    best_vi = Some(authored);
                 }
             }
         }
@@ -670,10 +680,12 @@ pub(super) fn brush_vertex_edge_hover(
                     continue;
                 };
                 let dist = point_to_segment_dist(viewport_cursor, sa, sb);
-                if dist < best_dist {
+                if dist < best_dist
+                    && let Some(authored) = cache.authored_edge((a, b))
+                {
                     best_dist = dist;
                     best_entity = Some(brush_entity);
-                    best_edge = Some((a, b));
+                    best_edge = Some(authored);
                 }
             }
         }

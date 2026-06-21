@@ -50,6 +50,12 @@ const SKIP_COMPONENT_PATHS: &[&str] = &[
     // multiplayer gate on clients). Persisting it plants a rig that fights
     // those systems on every load.
     "jackdaw_camera_rig::ActiveCameraRig",
+    // Render-state handles are always derived in the editor (brush chunks,
+    // terrain chunks, GLTF instances, reference-image quads) and rebuilt
+    // from the authored components on load; serializing them would inline
+    // runtime mesh/material assets into the scene.
+    "bevy_mesh::components::Mesh3d",
+    "bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::pbr_material::StandardMaterial>",
 ];
 
 /// Paths that override the skip prefixes  -- these are always saved even if
@@ -70,6 +76,9 @@ const ALWAYS_SAVE_PATHS: &[&str] = &[
     "jackdaw::prefab::components::Prefab",
     "jackdaw::prefab::components::IsA",
     "jackdaw::prefab::components::PrefabEntityId",
+    // Reference image boards persist with the scene; the quad mesh and
+    // material are derived from this component at runtime.
+    "jackdaw::reference_image::ReferenceImage",
 ];
 
 pub fn should_skip_component(type_path: &str) -> bool {
@@ -457,7 +466,7 @@ fn save_scene_inner(world: &mut World) -> Result<(), BevyError> {
 ///
 /// Known limitation: a previously-exported `.nav` is never deleted here. If
 /// a scene once had a navmesh (so `.nav` exists) and the navmesh is later
-/// removed, the stale `.nav` remains on disk. This is intentional for now —
+/// removed, the stale `.nav` remains on disk. This is intentional for now -
 /// deletion risks clobbering a file another tool or the user owns, and a
 /// stale `.nav` is better caught by a freshness check on the load side.
 fn export_navmesh_sibling(world: &World, scene_path: &str) {
@@ -2079,16 +2088,16 @@ pub(crate) fn despawn_scene_entities(world: &mut World) -> Result<(), BevyError>
         }
     }
 
-    // Sweep any leftover `BrushFaceEntity` mesh children. Despawning a
-    // parent brush does not always cascade through `ChildOf` in time;
-    // orphan face meshes would otherwise survive, keep their
-    // `Transform` and `MeshMaterial3d`, and render as a ghost box at
-    // world origin in the next scene.
-    let orphan_faces: Vec<Entity> = world
-        .query_filtered::<Entity, With<crate::brush::BrushFaceEntity>>()
+    // Sweep any leftover chunk mesh children. Despawning a parent brush
+    // does not always cascade through `ChildOf` in time; orphan chunk
+    // meshes would otherwise survive, keep their `Transform` and
+    // `MeshMaterial3d`, and render as a ghost box at world origin in
+    // the next scene.
+    let orphan_chunks: Vec<Entity> = world
+        .query_filtered::<Entity, With<crate::brush::BrushMeshChunk>>()
         .iter(world)
         .collect();
-    for entity in orphan_faces {
+    for entity in orphan_chunks {
         if let Ok(entity_mut) = world.get_entity_mut(entity) {
             entity_mut.despawn();
         }

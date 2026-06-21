@@ -232,8 +232,15 @@ pub fn brush_box_select(
                     let Some(screen) = screen_of(v) else {
                         continue;
                     };
-                    if inside(screen) && !sub.vertices.contains(&i) {
-                        sub.vertices.push(i);
+                    // Authored index: a box over both mirror halves picks
+                    // the same authored vertex twice; the contains check
+                    // dedupes. Cut geometry has no authored origin and is
+                    // not selectable.
+                    let Some(vi) = cache.authored_vert(i) else {
+                        continue;
+                    };
+                    if inside(screen) && !sub.vertices.contains(&vi) {
+                        sub.vertices.push(vi);
                         hit = true;
                     }
                 }
@@ -247,8 +254,11 @@ pub fn brush_box_select(
                     else {
                         continue;
                     };
-                    if inside(sa) && inside(sb) && !sub.edges.contains(&(a, b)) {
-                        sub.edges.push((a, b));
+                    let Some(edge) = cache.authored_edge((a, b)) else {
+                        continue;
+                    };
+                    if inside(sa) && inside(sb) && !sub.edges.contains(&edge) {
+                        sub.edges.push(edge);
                         hit = true;
                     }
                 }
@@ -264,8 +274,11 @@ pub fn brush_box_select(
                     let Some(screen) = screen_of(centroid) else {
                         continue;
                     };
-                    if inside(screen) && !sub.faces.contains(&f) {
-                        sub.faces.push(f);
+                    let Some(face) = cache.authored_face(f) else {
+                        continue;
+                    };
+                    if inside(screen) && !sub.faces.contains(&face) {
+                        sub.faces.push(face);
                         hit = true;
                     }
                 }

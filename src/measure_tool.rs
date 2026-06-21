@@ -67,12 +67,14 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
     use crate::core_extension::CoreExtensionInputContext;
     use bevy_enhanced_input::prelude::Press;
 
+    // Deferred: condition is not bare Press::default() (key + Press).
     ctx.entity_mut()
         .with_related::<ActionOf<CoreExtensionInputContext>>((
             Action::<MeasureDistanceOp>::new(),
             bindings![(KeyCode::KeyM, Press::default())],
         ));
 
+    // Deferred: condition is not bare Press::default() (mouse button + Press).
     ctx.entity_mut()
         .with_related::<ActionOf<CoreExtensionInputContext>>((
             Action::<ConfirmMeasureDistanceOp>::new(),
@@ -210,15 +212,7 @@ fn raycast_closest_point(ray: Ray3d, ray_cast: &mut MeshRayCast) -> Option<Vec3>
 }
 
 fn ray_plane_intersection(ray: Ray3d, plane_point: Vec3, plane_normal: Vec3) -> Option<Vec3> {
-    let denom = ray.direction.dot(plane_normal);
-    if denom.abs() < 1e-6 {
-        return None;
-    }
-    let t = (plane_point - ray.origin).dot(plane_normal) / denom;
-    if t < 0.0 {
-        return None;
-    }
-    Some(ray.origin + *ray.direction * t)
+    jackdaw_geometry::ray_plane_intersection(ray.origin, *ray.direction, plane_point, plane_normal)
 }
 
 // -- Viewport drawing --

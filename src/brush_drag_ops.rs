@@ -1,9 +1,7 @@
 //! Modal operators for the per-element brush drags: face / vertex /
-//! edge. Each one wraps the corresponding interaction state machine
-//! that used to run as an unconditional system in
-//! `brush::interaction`. The drag math itself is unchanged; this file
-//! owns the modal lifecycle (trigger on click, per-frame invoke,
-//! release commit, Escape cancel) and Right-click cancel.
+//! edge. This file owns the modal lifecycle (trigger on click,
+//! per-frame invoke, release commit, Escape cancel) and Right-click
+//! cancel.
 //!
 //! Constraint cycling (X / Y / Z) for vertex / edge drag is handled
 //! inline in the operator body. Escape goes through the global
@@ -22,9 +20,8 @@ use crate::brush::interaction::{
     FaceExtrudeMode, PendingSubDrag, VertexDragConstraint, compute_brush_drag_offset,
 };
 use crate::brush::{
-    BrushDragCapture, BrushDragState, BrushEditMode, BrushFaceEntity, BrushMeshCache,
-    BrushSelection, BrushSubSelection, EdgeDragState, EditMode, VertexDragState,
-    rebuild_brush_from_vertices,
+    BrushDragCapture, BrushDragState, BrushEditMode, BrushMeshCache, BrushSelection,
+    BrushSubSelection, EdgeDragState, EditMode, VertexDragState, rebuild_brush_from_vertices,
 };
 use crate::draw_brush::DrawBrushState;
 use crate::keybind_focus::KeybindFocus;
@@ -44,7 +41,6 @@ const DRAG_THRESHOLD: f32 = 5.0;
 /// drag edit. Bundling keeps the operator under Bevy's system-param ceiling.
 #[derive(SystemParam)]
 struct FacePickParams<'w, 's> {
-    face_entities: Query<'w, 's, (Entity, &'static BrushFaceEntity, &'static GlobalTransform)>,
     brush_caches: Query<'w, 's, &'static BrushMeshCache>,
     brushes: Query<'w, 's, (&'static mut Brush, &'static GlobalTransform)>,
 }
@@ -90,17 +86,16 @@ pub(crate) fn cursor_over_brush_face(
     viewport_cursor: Vec2,
     camera: &Camera,
     cam_tf: &GlobalTransform,
-    face_entities: &Query<(Entity, &BrushFaceEntity, &GlobalTransform)>,
+    transforms: &Query<&GlobalTransform>,
     brush_caches: &Query<&BrushMeshCache>,
 ) -> bool {
     let Ok(cache) = brush_caches.get(brush_entity) else {
         return false;
     };
-    for (_, face_ent, face_global) in face_entities {
-        if face_ent.brush_entity != brush_entity {
-            continue;
-        }
-        let polygon = &cache.face_polygons[face_ent.face_index];
+    let Ok(brush_global) = transforms.get(brush_entity) else {
+        return false;
+    };
+    for polygon in &cache.face_polygons {
         if polygon.len() < 3 {
             continue;
         }
@@ -108,7 +103,7 @@ pub(crate) fn cursor_over_brush_face(
             .iter()
             .filter_map(|&vi| {
                 camera
-                    .world_to_viewport(cam_tf, face_global.transform_point(cache.vertices[vi]))
+                    .world_to_viewport(cam_tf, brush_global.transform_point(cache.vertices[vi]))
                     .ok()
             })
             .collect();
@@ -130,18 +125,29 @@ pub(crate) fn cursor_over_brush_face(
 /// of: LMB while in face-edit mode, or Shift / Alt + LMB in object
 /// mode (auto-enters face-edit as a "quick action").
 pub(crate) fn face_drag_invoke_trigger(
-    mouse: Res<ButtonInput<MouseButton>>,
+    pointer: crate::modal_inputs::PointerInputs,
     keyboard: Res<ButtonInput<KeyCode>>,
     edit_mode: Res<EditMode>,
     drag_state: Res<BrushDragState>,
+    radial: Res<jackdaw_widgets::RadialMenuState>,
     keybind_focus: KeybindFocus,
     modal: Res<ModalTransformState>,
     draw_state: Res<DrawBrushState>,
     vp: ViewportCursor,
     gizmo_hover: Res<crate::gizmos::GizmoHoverState>,
+    mirror_plane_hover: Res<crate::brush::mirror_plane_overlay::MirrorPlaneHover>,
     mut commands: Commands,
 ) {
-    if !mouse.just_pressed(MouseButton::Left) || drag_state.active || drag_state.pending.is_some() {
+    if !pointer.pointer_primary_just_pressed() || drag_state.active || drag_state.pending.is_some()
+    {
+        return;
+    }
+
+    // A hovered mirror-plane handle owns the click: `mirror.plane.drag` grabs
+    // it (its hit-test ran last frame), so yield rather than race it for the
+    // same press and push/pull a face instead. The radial quick-menu likewise
+    // owns the pointer while open, so a click on a wedge must not push a face.
+    if mirror_plane_hover.target.is_some() || radial.open.is_some() {
         return;
     }
 
@@ -249,11 +255,10 @@ pub fn brush_face_drag(
                 let Ok(cache) = params.brush_caches.get(brush_entity) else {
                     continue;
                 };
-                for (_, face_ent, face_global) in &params.face_entities {
-                    if face_ent.brush_entity != brush_entity {
-                        continue;
-                    }
-                    let polygon = &cache.face_polygons[face_ent.face_index];
+                let Ok((_, brush_global)) = params.brushes.get(brush_entity) else {
+                    continue;
+                };
+                for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
                     if polygon.len() < 3 {
                         continue;
                     }
@@ -263,7 +268,7 @@ pub fn brush_face_drag(
                             camera
                                 .world_to_viewport(
                                     cam_tf,
-                                    face_global.transform_point(cache.vertices[vi]),
+                                    brush_global.transform_point(cache.vertices[vi]),
                                 )
                                 .ok()
                         })
@@ -275,11 +280,13 @@ pub fn brush_face_drag(
                         let centroid: Vec3 =
                             polygon.iter().map(|&vi| cache.vertices[vi]).sum::<Vec3>()
                                 / polygon.len() as f32;
-                        let depth = (cam_tf.translation() - face_global.transform_point(centroid))
+                        let depth = (cam_tf.translation() - brush_global.transform_point(centroid))
                             .length_squared();
-                        if depth < best_depth {
+                        if depth < best_depth
+                            && let Some(authored) = cache.authored_face(face_idx)
+                        {
                             best_depth = depth;
-                            best = Some((brush_entity, face_ent.face_index));
+                            best = Some((brush_entity, authored));
                         }
                     }
                 }
@@ -328,14 +335,11 @@ pub fn brush_face_drag(
             .primary()
             .filter(|&e| params.brushes.contains(e))?;
         let cache = params.brush_caches.get(brush_entity)?;
+        let (_, brush_global) = params.brushes.get(brush_entity)?;
 
         let mut best_face = None;
         let mut best_depth = f32::MAX;
-        for (_, face_ent, face_global) in &params.face_entities {
-            if face_ent.brush_entity != brush_entity {
-                continue;
-            }
-            let polygon = &cache.face_polygons[face_ent.face_index];
+        for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
             if polygon.len() < 3 {
                 continue;
             }
@@ -343,7 +347,7 @@ pub fn brush_face_drag(
                 .iter()
                 .filter_map(|&vi| {
                     camera
-                        .world_to_viewport(cam_tf, face_global.transform_point(cache.vertices[vi]))
+                        .world_to_viewport(cam_tf, brush_global.transform_point(cache.vertices[vi]))
                         .ok()
                 })
                 .collect();
@@ -353,11 +357,13 @@ pub fn brush_face_drag(
             if point_in_polygon_2d(viewport_cursor, &screen_verts) {
                 let centroid: Vec3 = polygon.iter().map(|&vi| cache.vertices[vi]).sum::<Vec3>()
                     / polygon.len() as f32;
-                let depth =
-                    (cam_tf.translation() - face_global.transform_point(centroid)).length_squared();
-                if depth < best_depth {
+                let depth = (cam_tf.translation() - brush_global.transform_point(centroid))
+                    .length_squared();
+                if depth < best_depth
+                    && let Some(authored) = cache.authored_face(face_idx)
+                {
                     best_depth = depth;
-                    best_face = Some(face_ent.face_index);
+                    best_face = Some(authored);
                 }
             }
         }
@@ -476,12 +482,13 @@ pub fn brush_face_drag(
                 else {
                     return OperatorResult::Running;
                 };
-                let screen_dir = (normal_screen - origin_screen).normalize_or_zero();
+                // Pixels per world unit along the face normal at this depth,
+                // so the push/pull tracks the cursor at any zoom or scale.
+                let screen_span = normal_screen - origin_screen;
+                let px_per_world = screen_span.length().max(1e-4);
                 let mouse_delta = viewport_cursor - drag_state.start_cursor;
-                let projected = mouse_delta.dot(screen_dir);
-                let cam_dist = (cam_tf.translation() - brush_pos).length();
-                let drag_amount =
-                    snap_translate(projected * cam_dist * 0.003, &snap_settings, ctrl);
+                let projected = mouse_delta.dot(screen_span / px_per_world);
+                let drag_amount = snap_translate(projected / px_per_world, &snap_settings, ctrl);
                 if let Ok(mut halfedge) = halfedge_q.get_mut(brush_entity) {
                     // HalfedgeMesh path: translate each selected face's ring vertices along the face normal.
                     let face_keys = halfedge.face_keys.clone();
@@ -545,19 +552,7 @@ pub fn brush_face_drag(
                     }
                     // Sync brush.faces[i].plane and brush.topology.
                     let new_topology = halfedge.mesh.flatten_to_topology();
-                    let positions: Vec<bevy::math::Vec3> =
-                        new_topology.vertices.iter().map(|v| v.position).collect();
-                    for (face_idx, face_data) in brush.faces.iter_mut().enumerate() {
-                        if face_idx < new_topology.polygons.len() {
-                            let normal = new_topology.face_normal_with(&positions, face_idx);
-                            let v0_idx = new_topology.loops
-                                [new_topology.polygons[face_idx].loop_start as usize]
-                                .vert as usize;
-                            let distance = positions[v0_idx].dot(normal);
-                            face_data.plane.normal = normal;
-                            face_data.plane.distance = distance;
-                        }
-                    }
+                    new_topology.recompute_face_planes(&mut brush.faces);
                     brush.topology = new_topology;
                 } else {
                     // Legacy convex path: just shift plane.distance.
@@ -584,12 +579,12 @@ pub fn brush_face_drag(
                 else {
                     return OperatorResult::Running;
                 };
-                let screen_dir = (normal_screen - origin_screen).normalize_or_zero();
+                let screen_span = normal_screen - origin_screen;
+                let px_per_world = screen_span.length().max(1e-4);
                 let mouse_delta = viewport_cursor - drag_state.start_cursor;
-                let projected = mouse_delta.dot(screen_dir);
-                let cam_dist = (cam_tf.translation() - face_centroid).length();
+                let projected = mouse_delta.dot(screen_span / px_per_world);
                 drag_state.extend_depth =
-                    snap_translate(projected * cam_dist * 0.003, &snap_settings, ctrl);
+                    snap_translate(projected / px_per_world, &snap_settings, ctrl);
             }
         }
     }
@@ -770,15 +765,17 @@ fn spawn_extruded_brush(
 // =====================================================================
 
 pub(crate) fn vertex_drag_invoke_trigger(
-    mouse: Res<ButtonInput<MouseButton>>,
+    pointer: crate::modal_inputs::PointerInputs,
     edit_mode: Res<EditMode>,
     drag_state: Res<VertexDragState>,
+    radial: Res<jackdaw_widgets::RadialMenuState>,
     keybind_focus: KeybindFocus,
     vp: ViewportCursor,
     gizmo_hover: Res<crate::gizmos::GizmoHoverState>,
+    mirror_plane_hover: Res<crate::brush::mirror_plane_overlay::MirrorPlaneHover>,
     mut commands: Commands,
 ) {
-    if !mouse.just_pressed(MouseButton::Left)
+    if !pointer.pointer_primary_just_pressed()
         || !matches!(*edit_mode, EditMode::BrushEdit(BrushEditMode::Vertex))
         || drag_state.active
         || drag_state.pending.is_some()
@@ -787,6 +784,13 @@ pub(crate) fn vertex_drag_invoke_trigger(
         // A hovered gizmo axis owns the click; the sub-element gizmo drag
         // takes it via `gizmo.drag_edit`.
         || gizmo_hover.hovered_axis.is_some()
+        // A hovered mirror-plane handle owns the click: `mirror.plane.drag`
+        // grabs it (its hit-test ran last frame), so yield rather than race it
+        // for the same press and drag a vertex instead.
+        || mirror_plane_hover.target.is_some()
+        // The radial quick-menu owns the pointer while open: a click on a wedge
+        // must not also start a sub-element drag in the viewport beneath it.
+        || radial.open.is_some()
     {
         return;
     }
@@ -814,6 +818,7 @@ pub fn brush_vertex_drag(
     _: In<OperatorParameters>,
     mouse: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    modal_inputs: crate::modal_inputs::ModalInputs,
     vp: ViewportCursor,
     brush_transforms: Query<&GlobalTransform>,
     mut brush_selection: ResMut<BrushSelection>,
@@ -823,6 +828,7 @@ pub fn brush_vertex_drag(
     mut drag_state: ResMut<VertexDragState>,
     modal: Option<Single<Entity, With<ActiveModalOperator>>>,
     mut halfedge_q: Query<&mut crate::brush::BrushHalfedge>,
+    mirror_q: Query<&jackdaw_geometry::ModifierStack>,
     snap_settings: Res<SnapSettings>,
     mut override_cursor: ResMut<OverrideCursor>,
 ) -> OperatorResult {
@@ -860,6 +866,9 @@ pub fn brush_vertex_drag(
             let cache = brush_caches.get(brush_entity)?;
             let brush_global = brush_transforms.get(brush_entity)?;
 
+            // The scan covers evaluated geometry on purpose: shift-clicking
+            // the mirrored half creates an authored vertex at the clicked
+            // (mirrored-side) position, which then re-mirrors.
             let mut best_split: Option<Vec3> = None;
             let mut best_dist = 20.0_f32;
             for (a, b) in cache.unique_edges() {
@@ -894,7 +903,10 @@ pub fn brush_vertex_drag(
                 }
             }
             let split_pos = best_split?;
-            let new_idx = cache.vertices.len();
+            // The split vertex is appended after the authored prefix at
+            // drag start, so its index is the authored count, not the
+            // (possibly mirror-extended) cache length.
+            let new_idx = cache.authored_vertex_count();
             brush_selection.sub_mut(brush_entity).vertices = vec![new_idx];
             drag_state.split_vertex = Some(split_pos);
             drag_state.pending = Some(PendingSubDrag {
@@ -918,9 +930,11 @@ pub fn brush_vertex_drag(
                     camera.world_to_viewport(cam_tf, brush_global.transform_point(*v))
                 {
                     let dist = (screen - viewport_cursor).length();
-                    if dist < best_dist {
+                    if dist < best_dist
+                        && let Some(authored) = cache.authored_vert(vi)
+                    {
                         best_dist = dist;
-                        best = Some((brush_entity, vi));
+                        best = Some((brush_entity, authored));
                     }
                 }
             }
@@ -973,13 +987,13 @@ pub fn brush_vertex_drag(
 
     // Subsequent invokes: constraint cycling, RMB cancel, release commit, drag math.
     if drag_state.active {
-        if keyboard.just_pressed(KeyCode::KeyX) {
+        if modal_inputs.axis_x() {
             drag_state.constraint =
                 toggle_constraint(drag_state.constraint, VertexDragConstraint::AxisX);
-        } else if keyboard.just_pressed(KeyCode::KeyY) {
+        } else if modal_inputs.axis_y() {
             drag_state.constraint =
                 toggle_constraint(drag_state.constraint, VertexDragConstraint::AxisY);
-        } else if keyboard.just_pressed(KeyCode::KeyZ) {
+        } else if modal_inputs.axis_z() {
             drag_state.constraint =
                 toggle_constraint(drag_state.constraint, VertexDragConstraint::AxisZ);
         }
@@ -1006,7 +1020,9 @@ pub fn brush_vertex_drag(
         drag_state.constraint = VertexDragConstraint::Free;
         drag_state.start_brush = Some(brush.clone());
         drag_state.start_cursor = viewport_cursor;
-        let mut all_verts = cache.vertices.clone();
+        // Authored prefix only: the legacy hull rebuild would otherwise
+        // bake any appended mirrored copies into the brush.
+        let mut all_verts = cache.authored_vertices().to_vec();
         if let Some(split_pos) = drag_state.split_vertex {
             all_verts.push(split_pos);
         }
@@ -1019,7 +1035,7 @@ pub fn brush_vertex_drag(
             .map(|&vi| all_verts.get(vi).copied().unwrap_or(Vec3::ZERO))
             .collect();
         drag_state.start_all_vertices = all_verts;
-        drag_state.start_face_polygons = cache.face_polygons.clone();
+        drag_state.start_face_polygons = cache.authored_face_polygons().to_vec();
 
         // Capture every edit brush with selected vertices so one shared world
         // offset moves them all.
@@ -1071,6 +1087,7 @@ pub fn brush_vertex_drag(
             &drag_state.brush_captures,
             &mut brushes,
             &mut halfedge_q,
+            &mirror_q,
         );
     }
     OperatorResult::Running
@@ -1114,15 +1131,17 @@ fn toggle_constraint(
 // =====================================================================
 
 pub(crate) fn edge_drag_invoke_trigger(
-    mouse: Res<ButtonInput<MouseButton>>,
+    pointer: crate::modal_inputs::PointerInputs,
     edit_mode: Res<EditMode>,
     drag_state: Res<EdgeDragState>,
+    radial: Res<jackdaw_widgets::RadialMenuState>,
     keybind_focus: KeybindFocus,
     vp: ViewportCursor,
     gizmo_hover: Res<crate::gizmos::GizmoHoverState>,
+    mirror_plane_hover: Res<crate::brush::mirror_plane_overlay::MirrorPlaneHover>,
     mut commands: Commands,
 ) {
-    if !mouse.just_pressed(MouseButton::Left)
+    if !pointer.pointer_primary_just_pressed()
         || !matches!(*edit_mode, EditMode::BrushEdit(BrushEditMode::Edge))
         || drag_state.active
         || drag_state.pending.is_some()
@@ -1131,6 +1150,13 @@ pub(crate) fn edge_drag_invoke_trigger(
         // A hovered gizmo axis owns the click; the sub-element gizmo drag
         // takes it via `gizmo.drag_edit`.
         || gizmo_hover.hovered_axis.is_some()
+        // A hovered mirror-plane handle owns the click: `mirror.plane.drag`
+        // grabs it (its hit-test ran last frame), so yield rather than race it
+        // for the same press and drag an edge instead.
+        || mirror_plane_hover.target.is_some()
+        // The radial quick-menu owns the pointer while open: a click on a wedge
+        // must not also start a sub-element drag in the viewport beneath it.
+        || radial.open.is_some()
     {
         return;
     }
@@ -1158,6 +1184,7 @@ pub fn brush_edge_drag(
     _: In<OperatorParameters>,
     mouse: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    modal_inputs: crate::modal_inputs::ModalInputs,
     vp: ViewportCursor,
     brush_transforms: Query<&GlobalTransform>,
     mut brush_selection: ResMut<BrushSelection>,
@@ -1167,6 +1194,7 @@ pub fn brush_edge_drag(
     mut drag_state: ResMut<EdgeDragState>,
     modal: Option<Single<Entity, With<ActiveModalOperator>>>,
     mut halfedge_q: Query<&mut crate::brush::BrushHalfedge>,
+    mirror_q: Query<&jackdaw_geometry::ModifierStack>,
     snap_settings: Res<SnapSettings>,
     mut override_cursor: ResMut<OverrideCursor>,
 ) -> OperatorResult {
@@ -1218,9 +1246,11 @@ pub fn brush_edge_drag(
                     continue;
                 };
                 let dist = point_to_segment_dist(viewport_cursor, sa, sb);
-                if dist < best_dist {
+                if dist < best_dist
+                    && let Some(authored) = cache.authored_edge((a, b))
+                {
                     best_dist = dist;
-                    best = Some((brush_entity, (a, b)));
+                    best = Some((brush_entity, authored));
                 }
             }
         }
@@ -1272,13 +1302,13 @@ pub fn brush_edge_drag(
     let brush_global = brush_transforms.get(brush_entity)?;
 
     if drag_state.active {
-        if keyboard.just_pressed(KeyCode::KeyX) {
+        if modal_inputs.axis_x() {
             drag_state.constraint =
                 toggle_constraint(drag_state.constraint, VertexDragConstraint::AxisX);
-        } else if keyboard.just_pressed(KeyCode::KeyY) {
+        } else if modal_inputs.axis_y() {
             drag_state.constraint =
                 toggle_constraint(drag_state.constraint, VertexDragConstraint::AxisY);
-        } else if keyboard.just_pressed(KeyCode::KeyZ) {
+        } else if modal_inputs.axis_z() {
             drag_state.constraint =
                 toggle_constraint(drag_state.constraint, VertexDragConstraint::AxisZ);
         }
@@ -1305,8 +1335,10 @@ pub fn brush_edge_drag(
         drag_state.constraint = VertexDragConstraint::Free;
         drag_state.start_brush = Some(brush.clone());
         drag_state.start_cursor = viewport_cursor;
-        drag_state.start_all_vertices = cache.vertices.clone();
-        drag_state.start_face_polygons = cache.face_polygons.clone();
+        // Authored prefix only: the legacy hull rebuild would otherwise
+        // bake any appended mirrored copies into the brush.
+        drag_state.start_all_vertices = cache.authored_vertices().to_vec();
+        drag_state.start_face_polygons = cache.authored_face_polygons().to_vec();
 
         let drag_edges: Vec<(usize, usize)> = brush_selection
             .sub(brush_entity)
@@ -1368,6 +1400,7 @@ pub fn brush_edge_drag(
             &drag_state.brush_captures,
             &mut brushes,
             &mut halfedge_q,
+            &mirror_q,
         );
     }
     OperatorResult::Running
@@ -1402,6 +1435,11 @@ fn clear_edge_drag_state(drag_state: &mut EdgeDragState) {
 /// `start_world` is the world position of those vertices at drag start, taken
 /// from the live cache; callers that need a split-extended vertex list (the
 /// vertex drag) adjust the active brush's capture afterward.
+///
+/// `start_all_vertices` / `start_face_polygons` hold only the cache's
+/// authored prefix: they are the legacy hull-rebuild baseline in
+/// [`apply_vertex_deltas`], and feeding it appended mirrored copies would
+/// bake them into the brush.
 pub(crate) fn capture_edit_brushes(
     brush_selection: &BrushSelection,
     brushes: &Query<&mut Brush>,
@@ -1437,8 +1475,8 @@ pub(crate) fn capture_edit_brushes(
         captures.push(BrushDragCapture {
             entity: e,
             start_brush: e_brush.clone(),
-            start_all_vertices: e_cache.vertices.clone(),
-            start_face_polygons: e_cache.face_polygons.clone(),
+            start_all_vertices: e_cache.authored_vertices().to_vec(),
+            start_face_polygons: e_cache.authored_face_polygons().to_vec(),
             indices,
             start_world,
             start_world_to_local: e_global.affine().inverse(),
@@ -1465,10 +1503,18 @@ fn apply_shared_drag(
     captures: &[BrushDragCapture],
     brushes: &mut Query<&mut Brush>,
     halfedge_q: &mut Query<&mut crate::brush::BrushHalfedge>,
+    mirrors: &Query<&jackdaw_geometry::ModifierStack>,
 ) {
-    let Some(local_offset) =
-        compute_brush_drag_offset(constraint, mouse_delta, cam_tf, camera, brush_global)
-    else {
+    // Calibrate the cursor-to-world scale at the dragged element's depth.
+    let anchor_world = brush_global.transform_point(primary_start);
+    let Some(local_offset) = compute_brush_drag_offset(
+        constraint,
+        mouse_delta,
+        cam_tf,
+        camera,
+        brush_global,
+        anchor_world,
+    ) else {
         return;
     };
     let local_offset = snap_drag_local_offset(
@@ -1483,7 +1529,7 @@ fn apply_shared_drag(
     // world displacement so every captured brush can re-express it in its own
     // local space. `transform_vector3` applies rotation + scale only.
     let world_offset = brush_global.affine().transform_vector3(local_offset);
-    broadcast_drag_to_captures(captures, world_offset, brushes, halfedge_q);
+    broadcast_drag_to_captures(captures, world_offset, brushes, halfedge_q, mirrors);
 }
 
 /// Move every captured brush's selected vertices by one shared world
@@ -1495,6 +1541,7 @@ pub(crate) fn broadcast_drag_to_captures(
     world_offset: Vec3,
     brushes: &mut Query<&mut Brush>,
     halfedge_q: &mut Query<&mut crate::brush::BrushHalfedge>,
+    mirrors: &Query<&jackdaw_geometry::ModifierStack>,
 ) {
     for capture in captures {
         let new_positions: Vec<Vec3> = capture
@@ -1513,6 +1560,10 @@ pub(crate) fn broadcast_drag_to_captures(
         apply_vertex_deltas(
             &mut brush,
             halfedge_opt.as_deref_mut(),
+            mirrors
+                .get(capture.entity)
+                .ok()
+                .and_then(|stack| stack.first_enabled_mirror()),
             &capture.start_brush,
             &capture.start_all_vertices,
             &capture.start_face_polygons,
@@ -1545,6 +1596,41 @@ pub(crate) fn restore_captures(
 // Reusable vertex-delta application
 // =====================================================================
 
+/// Mirror clip rule: per dragged vert and enabled mirror axis, in
+/// plane-relative coordinates, pin verts that started within
+/// `merge_dist` of the plane onto it and stop any vert from crossing
+/// to the other side. Both slices are brush-local and parallel:
+/// `start_positions[i]` is the drag-start position of the vert whose
+/// destination is `new_positions[i]`. Non-axis components are never
+/// touched, so pinned verts still slide along the plane.
+fn clip_mirror_positions(
+    mirror: &jackdaw_geometry::MeshMirror,
+    start_positions: &[Vec3],
+    new_positions: &mut [Vec3],
+) {
+    if !mirror.clip {
+        return;
+    }
+    let axes = mirror.axes();
+    for (bit, axis) in [
+        (jackdaw_geometry::MirrorAxes::X, 0usize),
+        (jackdaw_geometry::MirrorAxes::Y, 1),
+        (jackdaw_geometry::MirrorAxes::Z, 2),
+    ] {
+        if !axes.contains(bit) {
+            continue;
+        }
+        let plane = mirror.offset[axis];
+        for (next, start) in new_positions.iter_mut().zip(start_positions) {
+            let start_rel = start[axis] - plane;
+            let next_rel = next[axis] - plane;
+            if start_rel.abs() <= mirror.merge_dist || next_rel * start_rel < 0.0 {
+                next[axis] = plane;
+            }
+        }
+    }
+}
+
 /// Move a subset of brush vertices to new absolute brush-local positions and
 /// rebuild the geometry.
 ///
@@ -1562,16 +1648,38 @@ pub(crate) fn restore_captures(
 ///   vertex list is built from `all_vertices` with the selected positions
 ///   overwritten, then `rebuild_brush_from_vertices` derives the convex hull.
 ///   `start_brush`, `all_vertices`, and `face_polygons` are only read on this
-///   path; they may be empty slices when the `HalfedgeMesh` path is guaranteed.
+///   path; they may be empty slices when the `HalfedgeMesh` path is guaranteed
+///   AND `mirror` is `None`.
+///
+/// When `mirror` is `Some`, the destinations are clipped against the enabled
+/// mirror planes first ([`clip_mirror_positions`]); each dragged vert's start
+/// position is read from `all_vertices[indices[i]]`, so `all_vertices` must
+/// hold the drag-start authored vertices on both paths.
 pub(crate) fn apply_vertex_deltas(
     brush: &mut Brush,
     halfedge: Option<&mut crate::brush::BrushHalfedge>,
+    mirror: Option<&jackdaw_geometry::MeshMirror>,
     start_brush: &Brush,
     all_vertices: &[Vec3],
     face_polygons: &[Vec<usize>],
     indices: &[usize],
     new_positions: &[Vec3],
 ) {
+    let mut clipped;
+    let new_positions = if let Some(mirror) = mirror {
+        let start_positions: Vec<Vec3> = indices
+            .iter()
+            .zip(new_positions)
+            // An out-of-range index treats the destination as the start,
+            // which disables clipping for that vert instead of panicking.
+            .map(|(&vi, &next)| all_vertices.get(vi).copied().unwrap_or(next))
+            .collect();
+        clipped = new_positions.to_vec();
+        clip_mirror_positions(mirror, &start_positions, &mut clipped);
+        &clipped[..]
+    } else {
+        new_positions
+    };
     if let Some(halfedge) = halfedge {
         let vert_keys = halfedge.vert_keys.clone();
         for (sel_idx, &vert_idx) in indices.iter().enumerate() {
@@ -1596,17 +1704,7 @@ pub(crate) fn apply_vertex_deltas(
             halfedge.mesh.faces[fk].normal_cache = new_normal;
         }
         let new_topology = halfedge.mesh.flatten_to_topology();
-        let positions: Vec<Vec3> = new_topology.vertices.iter().map(|v| v.position).collect();
-        for (face_idx, face_data) in brush.faces.iter_mut().enumerate() {
-            if face_idx < new_topology.polygons.len() {
-                let normal = new_topology.face_normal_with(&positions, face_idx);
-                let v0_idx = new_topology.loops[new_topology.polygons[face_idx].loop_start as usize]
-                    .vert as usize;
-                let distance = positions[v0_idx].dot(normal);
-                face_data.plane.normal = normal;
-                face_data.plane.distance = distance;
-            }
-        }
+        new_topology.recompute_face_planes(&mut brush.faces);
         brush.topology = new_topology;
     } else {
         let mut new_verts = all_vertices.to_vec();
@@ -1626,24 +1724,9 @@ pub(crate) fn apply_vertex_deltas(
 #[cfg(test)]
 mod apply_vertex_deltas_tests {
     use super::*;
-    use jackdaw_geometry::halfedge::HalfedgeMesh;
 
     fn make_halfedge(brush: &Brush) -> crate::brush::BrushHalfedge {
-        let mesh = HalfedgeMesh::lift_from_topology(&brush.topology);
-        let vert_keys: Vec<_> = mesh.verts.keys().collect();
-        let mut face_keys: Vec<jackdaw_geometry::halfedge::FaceKey> =
-            vec![Default::default(); mesh.faces.len()];
-        for (k, f) in mesh.faces.iter() {
-            let slot = f.material_idx as usize;
-            if slot < face_keys.len() {
-                face_keys[slot] = k;
-            }
-        }
-        crate::brush::BrushHalfedge {
-            mesh,
-            vert_keys,
-            face_keys,
-        }
+        crate::brush::BrushHalfedge::from_topology(&brush.topology)
     }
 
     #[test]
@@ -1661,6 +1744,7 @@ mod apply_vertex_deltas_tests {
         apply_vertex_deltas(
             &mut brush,
             Some(&mut halfedge),
+            None,
             &start_brush,
             &[],
             &[],
@@ -1689,5 +1773,48 @@ mod apply_vertex_deltas_tests {
             faces_before,
             "face count should not change"
         );
+    }
+
+    #[test]
+    fn clip_pins_plane_verts_and_blocks_crossing() {
+        let mirror = jackdaw_geometry::MeshMirror {
+            mirror_x: true,
+            merge_dist: 0.001,
+            ..Default::default()
+        };
+        let start = vec![
+            Vec3::new(0.0005, 0.0, 0.0), // started on-plane: pinned
+            Vec3::new(0.5, 0.0, 0.0),    // off-plane, tries to cross
+            Vec3::new(0.5, 0.0, 0.0),    // off-plane, stays positive
+        ];
+        let mut next = vec![
+            Vec3::new(0.3, 1.0, 0.0),
+            Vec3::new(-0.2, 0.0, 0.0),
+            Vec3::new(0.1, 0.0, 0.0),
+        ];
+        clip_mirror_positions(&mirror, &start, &mut next);
+        assert_eq!(next[0].x, 0.0, "pinned vert slides on the plane");
+        assert_eq!(next[0].y, 1.0, "non-axis motion preserved");
+        assert_eq!(next[1].x, 0.0, "crossing clamped to the plane");
+        assert_eq!(next[2].x, 0.1, "same-side motion untouched");
+    }
+
+    #[test]
+    fn clip_disabled_or_no_mirror_axes_leaves_positions_alone() {
+        let start = vec![Vec3::new(0.0, 0.0, 0.0)];
+        let mut next = vec![Vec3::new(-0.5, 0.0, 0.0)];
+        let unclipped = jackdaw_geometry::MeshMirror {
+            clip: false,
+            ..Default::default()
+        };
+        clip_mirror_positions(&unclipped, &start, &mut next);
+        assert_eq!(next[0].x, -0.5, "clip=false never touches positions");
+
+        let axisless = jackdaw_geometry::MeshMirror {
+            mirror_x: false,
+            ..Default::default()
+        };
+        clip_mirror_positions(&axisless, &start, &mut next);
+        assert_eq!(next[0].x, -0.5, "no enabled axis means no clipping");
     }
 }

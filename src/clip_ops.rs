@@ -7,8 +7,8 @@
 //! applies, Escape clears.
 
 use bevy::{prelude::*, ui::ui_transform::UiGlobalTransform};
-use bevy_enhanced_input::prelude::{Press, *};
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
 use jackdaw_jsn::{Brush, BrushFaceData, BrushGroup, BrushPlane};
 
 use crate::brush::{
@@ -20,12 +20,11 @@ use crate::draw_brush::{CreateBrushCommand, brush_data_from_entity};
 use crate::viewport::{ActiveViewport, MainViewportCamera, SceneViewport};
 use crate::viewport_util::window_to_viewport_cursor_for;
 use jackdaw_geometry::{
-    EPSILON, compute_face_tangent_axes,
+    compute_face_tangent_axes,
     halfedge::{
         HalfedgeMesh,
         ops::bisect_plane::{BisectKeep, bisect_plane},
     },
-    point_inside_all_planes,
 };
 
 pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
@@ -34,24 +33,9 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
         .register_operator::<ClipApplyOp>()
         .register_operator::<ClipClearOp>();
 
-    let ext = ctx.id();
-    ctx.entity_mut().world_scope(|world| {
-        world.spawn((
-            Action::<ClipCycleModeOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::Tab, Press::default())],
-        ));
-        world.spawn((
-            Action::<ClipApplyOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::Enter, Press::default())],
-        ));
-        world.spawn((
-            Action::<ClipClearOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::Escape, Press::default())],
-        ));
-    });
+    ctx.bind_operator::<CoreExtensionInputContext, ClipCycleModeOp>([PresetInput::key("Tab")]);
+    ctx.bind_operator::<CoreExtensionInputContext, ClipApplyOp>([PresetInput::key("Enter")]);
+    ctx.bind_operator::<CoreExtensionInputContext, ClipClearOp>([PresetInput::key("Escape")]);
 }
 
 /// LMB in clip mode dispatches `brush.clip.place_point`. Mouse-button
@@ -160,36 +144,25 @@ pub(crate) fn clip_place_point(
         window_to_viewport_cursor_for(cursor_pos, camera, viewport_entity, &viewport_query)?;
     let ray = camera.viewport_to_world(cam_tf, viewport_cursor)?;
 
+    // Pick in brush-local space: unwrap the ray into the brush's local frame
+    // (rotation + translation only, matching the brush's rigid placement), then
+    // ask jackdaw_pick which face the local ray hits. `cache.vertices` and the
+    // face planes are already local, so the returned hit is the local point.
     let (_, brush_rot, brush_trans) = brush_global.to_scale_rotation_translation();
-    let mut best_t = f32::MAX;
-    let mut best_point = None;
-
-    for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
-        if polygon.len() < 3 {
-            continue;
-        }
-        let face = &brush.faces[face_idx];
-        let world_normal = brush_rot * face.plane.normal;
-        let face_centroid: Vec3 =
-            polygon.iter().map(|&vi| cache.vertices[vi]).sum::<Vec3>() / polygon.len() as f32;
-        let world_centroid = brush_global.transform_point(face_centroid);
-
-        let denom = world_normal.dot(*ray.direction);
-        if denom.abs() < EPSILON {
-            continue;
-        }
-        let t = (world_centroid - ray.origin).dot(world_normal) / denom;
-        if t > 0.0 && t < best_t {
-            let hit = ray.origin + *ray.direction * t;
-            let local_hit = brush_rot.inverse() * (hit - brush_trans);
-            if point_inside_all_planes(local_hit, &brush.faces) {
-                best_t = t;
-                best_point = Some(local_hit);
-            }
-        }
-    }
-
-    let local_hit = best_point?;
+    let inv_rot = brush_rot.inverse();
+    let local_origin = inv_rot * (ray.origin - brush_trans);
+    let local_dir = inv_rot * *ray.direction;
+    let faces: Vec<jackdaw_pick::Face<'_>> = cache
+        .face_polygons
+        .iter()
+        .zip(brush.faces.iter())
+        .map(|(ring, face)| jackdaw_pick::Face {
+            ring,
+            plane: face.plane.clone(),
+        })
+        .collect();
+    let (_, local_hit) =
+        jackdaw_pick::face_from_ray(local_origin, local_dir, &cache.vertices, &faces)?;
 
     let world_point = brush_global.transform_point(local_hit);
     let ctrl = keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
@@ -377,7 +350,7 @@ pub(crate) fn clip_apply(
 /// the cap slot from the first surviving face (so checker tiling
 /// inherits from the cut's neighbor) before zeroing UV axes so
 /// `ensure_uv_axes` derives proper tangents from the cap's plane.
-fn bisect_brush(brush: &Brush, plane: &BrushPlane, keep: BisectKeep) -> Option<Brush> {
+pub(crate) fn bisect_brush(brush: &Brush, plane: &BrushPlane, keep: BisectKeep) -> Option<Brush> {
     let mut mesh = HalfedgeMesh::lift_from_topology(&brush.topology);
     let result = bisect_plane(&mut mesh, plane, keep).ok()?;
     if mesh.face_count() == 0 {

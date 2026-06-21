@@ -9,13 +9,17 @@
 use std::collections::HashSet;
 
 use bevy::prelude::*;
-use bevy_enhanced_input::prelude::{Press, *};
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
+use jackdaw_geometry::halfedge::ops::delete_elements::{
+    DeleteResult, delete_edges, delete_faces, delete_verts,
+};
+use jackdaw_geometry::halfedge::{EdgeKey, FaceKey, HalfedgeMesh, VertKey, apply_topology_edit};
 use jackdaw_jsn::Brush;
 
 use crate::brush::{
-    BrushDragState, BrushEditMode, BrushMeshCache, BrushSelection, EdgeDragState, EditMode,
-    VertexDragState, rebuild_brush_from_vertices,
+    BrushDragState, BrushEditMode, BrushHalfedge, BrushMeshCache, BrushSelection, EdgeDragState,
+    EditMode, VertexDragState, rebuild_brush_from_vertices,
 };
 use crate::core_extension::CoreExtensionInputContext;
 use crate::keybind_focus::KeybindFocus;
@@ -25,27 +29,14 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
         .register_operator::<BrushNudgeUpOp>()
         .register_operator::<BrushNudgeDownOp>();
 
-    let ext = ctx.id();
-    ctx.entity_mut().world_scope(|world| {
-        world.spawn((
-            Action::<BrushDeleteElementOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![
-                (KeyCode::Delete, Press::default()),
-                (KeyCode::Backspace, Press::default()),
-            ],
-        ));
-        world.spawn((
-            Action::<BrushNudgeUpOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::PageUp, Press::default())],
-        ));
-        world.spawn((
-            Action::<BrushNudgeDownOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::PageDown, Press::default())],
-        ));
-    });
+    ctx.bind_operator::<CoreExtensionInputContext, BrushDeleteElementOp>([
+        PresetInput::key("Delete"),
+        PresetInput::key("Backspace"),
+    ]);
+    ctx.bind_operator::<CoreExtensionInputContext, BrushNudgeUpOp>([PresetInput::key("PageUp")]);
+    ctx.bind_operator::<CoreExtensionInputContext, BrushNudgeDownOp>([PresetInput::key(
+        "PageDown",
+    )]);
 }
 
 /// True when the operator is allowed to mutate brush elements: brush-edit
@@ -70,10 +61,14 @@ fn can_run_element_op(
 #[operator(
     id = "brush.delete_element",
     label = "Delete Element",
-    description = "Delete the selected vertex / edge / face from the active brush. \
-                   Dispatch follows the current `BrushEditMode`. The brush must \
-                   retain at least four vertices (a tetrahedron); availability \
-                   (`can_run_element_op`) is false otherwise.",
+    description = "Delete the selected vertex / edge / face from the active brush, \
+                   destroying the incident geometry and leaving a hole (no merge or \
+                   heal, unlike dissolve). Dispatch follows the current \
+                   `BrushEditMode`. Available whenever the brush-edit gate \
+                   (`can_run_element_op`) passes; the per-mode guard keeps at least \
+                   one polygon after a vertex / edge delete so the brush is never \
+                   left a loose vertex cloud, and allows a face delete down to the \
+                   last face.",
     is_available = can_run_element_op,
 )]
 pub(crate) fn brush_delete_element(
@@ -81,7 +76,7 @@ pub(crate) fn brush_delete_element(
     edit_mode: Res<EditMode>,
     mut brush_selection: ResMut<BrushSelection>,
     mut brushes: Query<&mut Brush>,
-    brush_caches: Query<&BrushMeshCache>,
+    mut halfedge_q: Query<&mut BrushHalfedge>,
 ) -> OperatorResult {
     let EditMode::BrushEdit(mode) = *edit_mode else {
         return OperatorResult::Cancelled;
@@ -90,107 +85,86 @@ pub(crate) fn brush_delete_element(
         return OperatorResult::Cancelled;
     }
 
-    // Gather per-brush work plans from immutable reads before any mutation.
-    struct DeletePlan {
-        entity: Entity,
-        removed_verts: HashSet<usize>,
-        removed_faces: HashSet<usize>,
-    }
-
     let edit_entities: Vec<Entity> = brush_selection.edit_brushes().collect();
-    let mut plans: Vec<DeletePlan> = Vec::new();
-    for e in &edit_entities {
-        let e = *e;
-        let Some(sub) = brush_selection.sub(e) else {
-            continue;
-        };
-        let Ok(cache) = brush_caches.get(e) else {
-            continue;
-        };
-        let Ok(brush) = brushes.get(e) else {
-            continue;
-        };
-        match mode {
-            BrushEditMode::Vertex if !sub.vertices.is_empty() => {
-                let removed: HashSet<usize> = sub.vertices.iter().copied().collect();
-                let remaining = cache.vertices.len().saturating_sub(removed.len());
-                if remaining >= 4 {
-                    plans.push(DeletePlan {
-                        entity: e,
-                        removed_verts: removed,
-                        removed_faces: HashSet::new(),
-                    });
-                }
-            }
-            BrushEditMode::Edge if !sub.edges.is_empty() => {
-                let removed: HashSet<usize> = sub.edges.iter().flat_map(|&(a, b)| [a, b]).collect();
-                let remaining = cache.vertices.len().saturating_sub(removed.len());
-                if remaining >= 4 {
-                    plans.push(DeletePlan {
-                        entity: e,
-                        removed_verts: removed,
-                        removed_faces: HashSet::new(),
-                    });
-                }
-            }
-            BrushEditMode::Face if !sub.faces.is_empty() => {
-                let removed: HashSet<usize> = sub.faces.iter().copied().collect();
-                let remaining = brush.faces.len().saturating_sub(removed.len());
-                if remaining >= 4 {
-                    plans.push(DeletePlan {
-                        entity: e,
-                        removed_verts: HashSet::new(),
-                        removed_faces: removed,
-                    });
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if plans.is_empty() {
-        return OperatorResult::Cancelled;
-    }
-
     let mut any_modified = false;
-    for plan in plans {
-        match mode {
-            BrushEditMode::Vertex | BrushEditMode::Edge => {
-                let Ok(cache) = brush_caches.get(plan.entity) else {
+    for entity in edit_entities {
+        let Some(sub) = brush_selection.sub(entity) else {
+            continue;
+        };
+        let sub_verts = sub.vertices.clone();
+        let sub_edges = sub.edges.clone();
+        let sub_faces = sub.faces.clone();
+        let has_selection = match mode {
+            BrushEditMode::Vertex => !sub_verts.is_empty(),
+            BrushEditMode::Edge => !sub_edges.is_empty(),
+            BrushEditMode::Face => !sub_faces.is_empty(),
+            BrushEditMode::Clip | BrushEditMode::Knife => false,
+        };
+        if !has_selection {
+            continue;
+        }
+
+        let Ok(mut halfedge) = halfedge_q.get_mut(entity) else {
+            continue;
+        };
+        let Ok(mut brush) = brushes.get_mut(entity) else {
+            continue;
+        };
+
+        // Guard: a vertex / edge delete must leave at least one polygon so the
+        // brush is never reduced to a loose vertex cloud. A face delete may go
+        // down to the last face. The gate runs the delete on a clone; the live
+        // delete runs inside the reconcile closure below.
+        let edit: Box<dyn FnOnce(&mut HalfedgeMesh) -> DeleteResult> = match mode {
+            BrushEditMode::Vertex => {
+                let keys: Vec<VertKey> = sub_verts
+                    .iter()
+                    .filter_map(|&v| halfedge.vert_keys.get(v).copied())
+                    .collect();
+                if keys.is_empty() {
                     continue;
-                };
-                let Ok(mut brush) = brushes.get_mut(plan.entity) else {
-                    continue;
-                };
-                if rebuild_after_remove(&mut brush, cache, &plan.removed_verts) {
-                    if let Some(sub) = brush_selection.brushes.get_mut(&plan.entity) {
-                        if matches!(mode, BrushEditMode::Vertex) {
-                            sub.vertices.clear();
-                        } else {
-                            sub.edges.clear();
-                        }
-                    }
-                    any_modified = true;
                 }
+                let preview = preview_face_count(&halfedge.mesh, |mesh| delete_verts(mesh, &keys));
+                if preview == 0 {
+                    continue;
+                }
+                Box::new(move |mesh| delete_verts(mesh, &keys))
+            }
+            BrushEditMode::Edge => {
+                let keys: Vec<EdgeKey> = sub_edges
+                    .iter()
+                    .filter_map(|&(a, b)| edge_key_between(&halfedge, a, b))
+                    .collect();
+                if keys.is_empty() {
+                    continue;
+                }
+                let preview = preview_face_count(&halfedge.mesh, |mesh| delete_edges(mesh, &keys));
+                if preview == 0 {
+                    continue;
+                }
+                Box::new(move |mesh| delete_edges(mesh, &keys))
             }
             BrushEditMode::Face => {
-                let Ok(mut brush) = brushes.get_mut(plan.entity) else {
-                    continue;
-                };
-                brush.faces = brush
-                    .faces
+                let keys: Vec<FaceKey> = sub_faces
                     .iter()
-                    .enumerate()
-                    .filter(|(i, _)| !plan.removed_faces.contains(i))
-                    .map(|(_, f)| f.clone())
+                    .filter_map(|&f| halfedge.face_keys.get(f).copied())
                     .collect();
-                if let Some(sub) = brush_selection.brushes.get_mut(&plan.entity) {
-                    sub.faces.clear();
+                if keys.is_empty() {
+                    continue;
                 }
-                any_modified = true;
+                Box::new(move |mesh| delete_faces(mesh, &keys))
             }
-            BrushEditMode::Clip | BrushEditMode::Knife => unreachable!(),
+            BrushEditMode::Clip | BrushEditMode::Knife => continue,
+        };
+
+        apply_delete_to_brush(&mut brush, &mut halfedge, edit);
+
+        if let Some(sub) = brush_selection.brushes.get_mut(&entity) {
+            sub.vertices.clear();
+            sub.edges.clear();
+            sub.faces.clear();
         }
+        any_modified = true;
     }
 
     if any_modified {
@@ -200,28 +174,55 @@ pub(crate) fn brush_delete_element(
     }
 }
 
-fn rebuild_after_remove(
-    brush: &mut Brush,
-    cache: &BrushMeshCache,
-    removed: &HashSet<usize>,
-) -> bool {
-    let remaining: Vec<Vec3> = cache
-        .vertices
+/// Run a delete on a clone of the mesh and report the surviving face count,
+/// used to gate a destructive vertex / edge delete without mutating the live
+/// mesh.
+fn preview_face_count(
+    mesh: &HalfedgeMesh,
+    run: impl FnOnce(&mut HalfedgeMesh) -> DeleteResult,
+) -> usize {
+    let mut probe = mesh.clone();
+    run(&mut probe);
+    probe.face_count()
+}
+
+/// Map a selected cache-edge `(a, b)` to its live `EdgeKey` via the parallel
+/// `vert_keys` table.
+fn edge_key_between(halfedge: &BrushHalfedge, a: usize, b: usize) -> Option<EdgeKey> {
+    let &va = halfedge.vert_keys.get(a)?;
+    let &vb = halfedge.vert_keys.get(b)?;
+    halfedge
+        .mesh
+        .edges
         .iter()
-        .enumerate()
-        .filter(|(i, _)| !removed.contains(i))
-        .map(|(_, v)| *v)
-        .collect();
-    if remaining.len() < 4 {
-        return false;
+        .find(|(_, e)| (e.v[0] == va && e.v[1] == vb) || (e.v[0] == vb && e.v[1] == va))
+        .map(|(k, _)| k)
+}
+
+/// Run a destructive delete and reconcile the brush. Applies `edit` through the
+/// topology seam (recache normals, flatten, recompute planes, re-lift binding),
+/// then rebuilds `brush.faces` parallel to the surviving polygons by re-indexing
+/// the old per-face data through `surviving_faces` so each face keeps its
+/// material + uv source rather than being default-filled.
+fn apply_delete_to_brush(
+    brush: &mut Brush,
+    halfedge: &mut BrushHalfedge,
+    edit: impl FnOnce(&mut HalfedgeMesh) -> DeleteResult,
+) {
+    let old_faces = brush.faces.clone();
+    let result = apply_topology_edit(&mut brush.faces, &mut brush.topology, &mut halfedge.0, edit);
+
+    let mut new_faces: Vec<jackdaw_jsn::BrushFaceData> =
+        Vec::with_capacity(result.surviving_faces.len());
+    for &old_idx in &result.surviving_faces {
+        let old = old_faces
+            .get(old_idx)
+            .cloned()
+            .unwrap_or_else(|| old_faces.last().cloned().unwrap_or_default());
+        new_faces.push(old);
     }
-    let Some((new_brush, _)) =
-        rebuild_brush_from_vertices(brush, &cache.vertices, &cache.face_polygons, &remaining)
-    else {
-        return false;
-    };
-    *brush = new_brush;
-    true
+    brush.faces = new_faces;
+    brush.topology.recompute_face_planes(&mut brush.faces);
 }
 
 #[operator(
@@ -317,7 +318,7 @@ fn nudge_brush_element(
             BrushEditMode::Face if !sub.faces.is_empty() => sub
                 .faces
                 .iter()
-                .filter_map(|&fi| cache.face_polygons.get(fi))
+                .filter_map(|&fi| cache.authored_face_polygons().get(fi))
                 .flat_map(|poly| poly.iter().copied())
                 .collect(),
             _ => continue,
@@ -344,14 +345,16 @@ fn nudge_brush_element(
         let Ok(mut brush) = brushes.get_mut(plan.entity) else {
             continue;
         };
-        let mut new_verts = cache.vertices.clone();
+        let authored_verts = cache.authored_vertices();
+        let authored_faces = cache.authored_face_polygons();
+        let mut new_verts = authored_verts.to_vec();
         for &vi in &plan.affected_verts {
             if vi < new_verts.len() {
                 new_verts[vi] += offset;
             }
         }
         let Some((new_brush, old_to_new)) =
-            rebuild_brush_from_vertices(&brush, &cache.vertices, &cache.face_polygons, &new_verts)
+            rebuild_brush_from_vertices(&brush, authored_verts, authored_faces, &new_verts)
         else {
             continue;
         };

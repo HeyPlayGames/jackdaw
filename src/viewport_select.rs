@@ -1,6 +1,6 @@
 use crate::{
     EditorEntity,
-    brush::{BrushFaceEntity, BrushMeshCache},
+    brush::BrushMeshCache,
     brush_drag_ops::cursor_over_brush_face,
     gizmos::handle_gizmo_hover,
     selection::Selection,
@@ -13,8 +13,8 @@ use bevy::{
     picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings, RayCastVisibility},
     prelude::*,
 };
-use bevy_enhanced_input::prelude::{Press, *};
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
 use jackdaw_jsn::{Brush, BrushGroup};
 
 /// Marker for the box-select visual overlay node.
@@ -44,12 +44,9 @@ impl Plugin for ViewportSelectPlugin {
 pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
     ctx.register_operator::<BoxSelectOp>()
         .register_operator::<ViewportExitGroupEditOp>();
-    let ext = ctx.id();
-    ctx.spawn((
-        Action::<ViewportExitGroupEditOp>::new(),
-        ActionOf::<crate::core_extension::CoreExtensionInputContext>::new(ext),
-        bindings![(KeyCode::Escape, Press::default())],
-    ));
+    ctx.bind_operator::<crate::core_extension::CoreExtensionInputContext, ViewportExitGroupEditOp>(
+        [PresetInput::key("Escape")],
+    );
 }
 
 fn group_edit_active(
@@ -131,7 +128,7 @@ pub(crate) struct LastClick {
 }
 
 pub(crate) fn handle_viewport_click(
-    mouse: Res<ButtonInput<MouseButton>>,
+    pointer: crate::modal_inputs::PointerInputs,
     keyboard: Res<ButtonInput<KeyCode>>,
     vp: ViewportCursor,
     scene_entities: Query<(Entity, &GlobalTransform), (Without<EditorEntity>, With<Transform>)>,
@@ -139,6 +136,7 @@ pub(crate) fn handle_viewport_click(
     parents: Query<&ChildOf>,
     brush_groups: Query<(), With<BrushGroup>>,
     brushes: Query<(), With<Brush>>,
+    reference_images: Query<&crate::reference_image::ReferenceImage>,
     guards: InteractionGuards,
     mut selection: ResMut<Selection>,
     mut input_focus: ResMut<InputFocus>,
@@ -157,7 +155,7 @@ pub(crate) fn handle_viewport_click(
 
     // Physics mode is intentionally not blocked: the user needs to
     // click-select entities to drag them in the physics tool.
-    if !mouse.just_pressed(MouseButton::Left)
+    if !pointer.pointer_primary_just_pressed()
         || guards.is_any_interaction_active()
         || guards.gizmo_hover.hovered_axis.is_some()
         || just_finished_draw
@@ -197,7 +195,11 @@ pub(crate) fn handle_viewport_click(
         // `MeshRayCast` doesn't filter by render layer, so without
         // this guard the picker hits invisible meshes at world origin
         // and short-circuits before reaching the actual scene.
-        let editor_filter = |entity: Entity| !editor_entities.contains(entity);
+        // Locked reference images are also excluded so clicks pass
+        // through them to the geometry behind.
+        let editor_filter = |entity: Entity| {
+            !editor_entities.contains(entity) && !is_locked_reference(&reference_images, entity)
+        };
         let settings = MeshRayCastSettings::default()
             .with_visibility(RayCastVisibility::Any)
             .with_filter(&editor_filter);
@@ -211,6 +213,7 @@ pub(crate) fn handle_viewport_click(
                 &group_edit,
                 &brush_groups,
                 &brushes,
+                &reference_images,
             ) {
                 best_entity = Some(ancestor);
                 break;
@@ -231,6 +234,7 @@ pub(crate) fn handle_viewport_click(
                     &group_edit,
                     &brush_groups,
                     &brushes,
+                    &reference_images,
                 ) == Some(current_primary)
                 {
                     return;
@@ -243,6 +247,9 @@ pub(crate) fn handle_viewport_click(
     if best_entity.is_none() {
         let mut best_dist = 30.0_f32;
         for (entity, global_tf) in &scene_entities {
+            if is_locked_reference(&reference_images, entity) {
+                continue;
+            }
             let pos = global_tf.translation();
             if let Ok(screen_pos) = camera.world_to_viewport(cam_tf, pos) {
                 let dist = (screen_pos - local_cursor).length();
@@ -317,14 +324,14 @@ pub(crate) fn handle_viewport_click(
 /// face-drag because face-drag's hit-test runs inside its operator
 /// a frame later. See `cursor_over_brush_face`.
 fn box_select_pending_trigger(
-    mouse: Res<ButtonInput<MouseButton>>,
+    pointer: crate::modal_inputs::PointerInputs,
     vp: ViewportCursor,
     guards: InteractionGuards,
     mut box_state: ResMut<BoxSelectState>,
     viewport_query: Query<(&ComputedNode, &UiGlobalTransform), With<SceneViewport>>,
     selection: Res<Selection>,
     brushes: Query<(), With<Brush>>,
-    face_entities: Query<(Entity, &BrushFaceEntity, &GlobalTransform)>,
+    transforms: Query<&GlobalTransform>,
     brush_caches: Query<&BrushMeshCache>,
 ) {
     // `gizmo_drag.active` doesn't flip until next frame because the
@@ -332,7 +339,7 @@ fn box_select_pending_trigger(
     // the same-frame case.
     if box_state.active
         || box_state.pending.is_some()
-        || !mouse.just_pressed(MouseButton::Left)
+        || !pointer.pointer_primary_just_pressed()
         || guards.is_any_interaction_active()
         || guards.gizmo_hover.hovered_axis.is_some()
     {
@@ -365,7 +372,7 @@ fn box_select_pending_trigger(
             viewport_cursor,
             camera,
             cam_tf,
-            &face_entities,
+            &transforms,
             &brush_caches,
         )
     {
@@ -425,6 +432,7 @@ pub fn box_select(
     vp: ViewportCursor,
     mut box_state: ResMut<BoxSelectState>,
     scene_entities: Query<(Entity, &GlobalTransform), (Without<EditorEntity>, With<Name>)>,
+    reference_images: Query<&crate::reference_image::ReferenceImage>,
     mut selection: ResMut<Selection>,
     mut commands: Commands,
     active: ActiveModalQuery,
@@ -473,6 +481,11 @@ pub fn box_select(
     let selected: Vec<Entity> = scene_entities
         .iter()
         .filter_map(|(entity, tf)| {
+            // Locked reference images stay out of box selection, same
+            // as they stay out of click selection.
+            if is_locked_reference(&reference_images, entity) {
+                return None;
+            }
             let screen = camera.world_to_viewport(cam_tf, tf.translation()).ok()?;
             (screen.x >= min.x && screen.x <= max.x && screen.y >= min.y && screen.y <= max.y)
                 .then_some(entity)
@@ -513,6 +526,15 @@ fn update_box_select_overlay(
     }
 }
 
+/// Returns `true` when `entity` is a reference image with `locked = true`.
+/// Used in multiple selection paths to make locked boards pass-through.
+fn is_locked_reference(
+    refs: &Query<&crate::reference_image::ReferenceImage>,
+    entity: Entity,
+) -> bool {
+    refs.get(entity).is_ok_and(|r| r.locked)
+}
+
 /// Walk up the `ChildOf` hierarchy from a raycast hit entity to find the
 /// selectable ancestor. A brush resolves to itself regardless of nesting.
 /// A non-brush scene entity whose parent is also a scene entity walks up
@@ -520,6 +542,8 @@ fn update_box_select_overlay(
 /// When inside a group (`GroupEditState::active_group` is set), non-brush
 /// children of that group stop at the child so individual fragments can
 /// be selected; a brush child returns via the brush early-exit above.
+/// Locked reference images resolve to `None` so viewport clicks pass
+/// through to whatever sits behind them.
 fn find_selectable_ancestor(
     mut entity: Entity,
     scene_entities: &Query<(Entity, &GlobalTransform), (Without<EditorEntity>, With<Transform>)>,
@@ -527,8 +551,12 @@ fn find_selectable_ancestor(
     group_edit: &GroupEditState,
     brush_groups: &Query<(), With<BrushGroup>>,
     brushes: &Query<(), With<Brush>>,
+    reference_images: &Query<&crate::reference_image::ReferenceImage>,
 ) -> Option<Entity> {
     loop {
+        if is_locked_reference(reference_images, entity) {
+            return None;
+        }
         if scene_entities.contains(entity) {
             // A brush always resolves to itself; never walk past it to a parent.
             if brushes.contains(entity) {

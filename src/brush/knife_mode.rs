@@ -128,12 +128,15 @@ pub struct KnifeSnapTarget {
     /// Brush-local snap point (for stable mesh ops).
     pub local_pos: Vec3,
     pub kind: KnifeSnapKind,
-    /// Which face of the brush the snap was computed against.
+    /// Which face of the brush the snap was computed against. Authored
+    /// index: the knife snaps only to authored geometry, so the live
+    /// mirrored half is never a snap candidate.
     pub face_idx: usize,
     /// Canonical (min, max) vert indices of the edge the snap is on, or
-    /// `None` if the snap landed on an existing vert.
+    /// `None` if the snap landed on an existing vert. Authored indices.
     pub edge_pair: Option<(usize, usize)>,
-    /// Existing vert index if the snap reused a corner.
+    /// Existing vert index if the snap reused a corner. Authored index,
+    /// resolved against `Brush::topology` at commit.
     pub vert_idx: Option<usize>,
     /// When `kind == PathPoint`, the index into the live `path` that
     /// the cursor snapped to. `None` for every other kind.
@@ -727,7 +730,9 @@ fn compute_path_edge_intersections(
     }
 
     let mut seen_edges: std::collections::HashSet<(usize, usize)> = Default::default();
-    for polygon in &cache.face_polygons {
+    // Authored faces only: the commit splits authored edges, never the
+    // live mirrored half, so mirrored edges cannot be real crossings.
+    for polygon in cache.authored_face_polygons() {
         if polygon.len() < 3 {
             continue;
         }
@@ -798,7 +803,9 @@ fn segment_intersect_2d(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2) -> Option<(f32, 
     Some((t1, t2))
 }
 
-/// Pick the closest face of `cache` under the cursor in screen space.
+/// Pick the closest authored face of `cache` under the cursor in screen
+/// space. Mirrored-half faces are not pickable: the live mirrored half
+/// is preview output and the knife only cuts authored geometry.
 fn pick_face_under_cursor(
     viewport_cursor: Vec2,
     cache: &BrushMeshCache,
@@ -809,7 +816,7 @@ fn pick_face_under_cursor(
     let mut best_face = None;
     let mut best_depth = f32::MAX;
 
-    for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
+    for (face_idx, polygon) in cache.authored_face_polygons().iter().enumerate() {
         if polygon.len() < 3 {
             continue;
         }
@@ -837,9 +844,12 @@ fn pick_face_under_cursor(
     best_face
 }
 
-/// Scan every face polygon's verts. Returns the closest vert within
-/// `KNIFE_SNAP_PIXELS` of the cursor, deduplicated by vert index so a
-/// shared vert isn't double-counted across faces.
+/// Scan every authored face polygon's verts. Returns the closest vert
+/// within `KNIFE_SNAP_PIXELS` of the cursor, deduplicated by vert index
+/// so a shared vert isn't double-counted across faces. Mirrored-half
+/// verts are never candidates: the knife only cuts authored geometry,
+/// so snapping to the live mirrored half would put the cut on the
+/// opposite side from the click.
 ///
 /// Candidates are ordered by camera-space depth (smallest `clip_z` first,
 /// i.e. closest to camera), with screen distance as the tiebreaker. This
@@ -870,7 +880,7 @@ fn compute_vert_snap_all(
     let mut best: Option<(usize, f32, f32, usize)> = None;
     let mut seen: std::collections::HashSet<usize> = std::collections::HashSet::new();
 
-    for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
+    for (face_idx, polygon) in cache.authored_face_polygons().iter().enumerate() {
         for &vi in polygon {
             if !seen.insert(vi) {
                 continue;
@@ -921,11 +931,14 @@ fn compute_vert_snap_all(
     })
 }
 
-/// Scan every face polygon's edges (deduplicated by canonical
+/// Scan every authored face polygon's edges (deduplicated by canonical
 /// `(min, max)` pair). Returns the best edge-midpoint snap (only when
 /// `shift` is held) and the best edge-point snap. Edges shared between
 /// faces are processed exactly once, so the snap target stays put when
-/// the cursor crosses a face boundary in screen space.
+/// the cursor crosses a face boundary in screen space. Mirrored-half
+/// edges are never candidates: the commit resolves edge snaps by
+/// position against the authored halfedge mesh, so a mirrored-space
+/// position would fail to resolve and abort the whole path.
 ///
 /// Candidates are ordered by camera-space depth at the snap point
 /// (smallest `clip_z` first, i.e. closest to camera), with screen
@@ -956,7 +969,7 @@ fn compute_edge_snap_all(
     let mut best_midpoint: Option<(usize, usize, f32, f32, usize)> = None;
     let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
 
-    for (face_idx, polygon) in cache.face_polygons.iter().enumerate() {
+    for (face_idx, polygon) in cache.authored_face_polygons().iter().enumerate() {
         let n = polygon.len();
         if n < 2 {
             continue;
@@ -1123,15 +1136,12 @@ fn compute_grid_snap(
     let centroid_local: Vec3 = ring_local.iter().copied().sum::<Vec3>() / ring_local.len() as f32;
     let centroid_world = brush_global.transform_point(centroid_local);
     let ray = camera.viewport_to_world(cam_tf, viewport_cursor).ok()?;
-    let denom = world_normal.dot(*ray.direction);
-    if denom.abs() < 1e-6 {
-        return None;
-    }
-    let t = (centroid_world - ray.origin).dot(world_normal) / denom;
-    if t < 0.0 {
-        return None;
-    }
-    let hit_world = ray.origin + *ray.direction * t;
+    let hit_world = jackdaw_geometry::ray_plane_intersection(
+        ray.origin,
+        *ray.direction,
+        centroid_world,
+        world_normal,
+    )?;
 
     // Snap the WORLD position to the grid: the grid lives in world
     // space (it's a global setting; the visible InfiniteGrid is in
@@ -1236,15 +1246,12 @@ fn compute_face_interior_snap(
     let centroid_world = brush_global.transform_point(centroid_local);
 
     let ray = camera.viewport_to_world(cam_tf, viewport_cursor).ok()?;
-    let denom = world_normal.dot(*ray.direction);
-    if denom.abs() < 1e-6 {
-        return None;
-    }
-    let t = (centroid_world - ray.origin).dot(world_normal) / denom;
-    if t < 0.0 {
-        return None;
-    }
-    let hit_world = ray.origin + *ray.direction * t;
+    let hit_world = jackdaw_geometry::ray_plane_intersection(
+        ray.origin,
+        *ray.direction,
+        centroid_world,
+        world_normal,
+    )?;
 
     // Brush-local hit: invert the brush's global transform on the world
     // hit. `transform_point` uses scale + rotation + translation, so
@@ -1527,17 +1534,7 @@ fn commit_path(world: &mut World, brush_entity: Entity) {
         new_faces.push(src);
     }
 
-    let positions: Vec<Vec3> = new_topology.vertices.iter().map(|v| v.position).collect();
-    for (idx, face_data) in new_faces.iter_mut().enumerate() {
-        if idx < new_topology.polygons.len() {
-            let normal = new_topology.face_normal_with(&positions, idx);
-            let v0_idx =
-                new_topology.loops[new_topology.polygons[idx].loop_start as usize].vert as usize;
-            let distance = positions[v0_idx].dot(normal);
-            face_data.plane.normal = normal;
-            face_data.plane.distance = distance;
-        }
-    }
+    new_topology.recompute_face_planes(&mut new_faces);
 
     let new_brush = {
         let Some(mut brush_mut) = world.get_mut::<Brush>(brush_entity) else {
@@ -1740,7 +1737,7 @@ fn find_live_face_containing_point(mesh: &HalfedgeMesh, click: Vec3) -> Option<F
         if plane_dist > 1e-2 {
             continue;
         }
-        if point_in_polygon_3d(click, &ring_positions, n) {
+        if jackdaw_pick::point_in_polygon(click, &ring_positions, n) {
             return Some(k);
         }
     }
@@ -1775,49 +1772,6 @@ fn face_ring_positions(mesh: &HalfedgeMesh, face: FaceKey) -> Vec<Vec3> {
         cur = mesh.loops[cur].next;
     }
     out
-}
-
-/// 3D point-in-polygon: project the polygon and the test point onto
-/// the plane spanned by the polygon (using `normal` as the plane
-/// normal), then run a 2D ray-cast. Returns true when `point` is
-/// inside the projected polygon.
-fn point_in_polygon_3d(point: Vec3, ring: &[Vec3], normal: Vec3) -> bool {
-    if ring.len() < 3 {
-        return false;
-    }
-    let n = normal.normalize_or_zero();
-    if n == Vec3::ZERO {
-        return false;
-    }
-    // Build a 2D basis perpendicular to `n`.
-    let u_seed = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
-    let u = (u_seed - n * u_seed.dot(n)).normalize_or_zero();
-    if u == Vec3::ZERO {
-        return false;
-    }
-    let v = n.cross(u);
-    let origin = ring[0];
-    let to_2d = |p: Vec3| -> Vec2 {
-        let d = p - origin;
-        Vec2::new(d.dot(u), d.dot(v))
-    };
-    let ring_2d: Vec<Vec2> = ring.iter().map(|&p| to_2d(p)).collect();
-    let point_2d = to_2d(point);
-    // Standard ray-cast.
-    let n2d = ring_2d.len();
-    let mut inside = false;
-    let mut j = n2d - 1;
-    for i in 0..n2d {
-        let pi = ring_2d[i];
-        let pj = ring_2d[j];
-        if ((pi.y > point_2d.y) != (pj.y > point_2d.y))
-            && (point_2d.x < (pj.x - pi.x) * (point_2d.y - pi.y) / (pj.y - pi.y) + pi.x)
-        {
-            inside = !inside;
-        }
-        j = i;
-    }
-    inside
 }
 
 /// Insert a chord from `va` to `vb`. If the two verts share a live

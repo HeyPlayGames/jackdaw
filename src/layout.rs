@@ -22,6 +22,7 @@ use crate::{
     },
     gizmo_ops::GizmoSpaceToggleOp,
     gizmos::GizmoSpace,
+    grid_ops::{GridDecreaseOp, GridIncreaseOp, GridToggleSnapOp},
     hierarchy::{HierarchyPanel, HierarchyShowAllButton, HierarchyTreeContainer},
     inspector::Inspector,
     measure_tool::MeasureDistanceOp,
@@ -29,6 +30,7 @@ use crate::{
     pie::PieWindowModeToggleOp,
     pie_mirror::{PieViewHeader, PieViewMode, PieViewSegment},
     remote::ConnectionManager,
+    snapping::SnapSettings,
     tool_ops::{ToolRotateOp, ToolScaleOp, ToolSelectOp, ToolTranslateOp},
     viewport::SceneViewport,
     windowing::{JackdawIcon, title_bar_repo_link},
@@ -497,8 +499,74 @@ fn toolbar() -> impl Bundle {
             toolbar_op_button::<EditModeClipOp>(Icon::ScissorsLineDashed),
             separator::separator(separator::SeparatorProps::vertical()),
             toolbar_op_button::<PhysicsActivateOp>(Icon::Zap),
+            // Spacer pushes the grid / snap widget to the right edge.
+            (Node {
+                flex_grow: 1.0,
+                ..Default::default()
+            },),
+            // Grid-size stepper: current size between decrease / increase.
+            toolbar_op_button::<GridDecreaseOp>(Icon::Minus),
+            grid_size_label(),
+            toolbar_op_button::<GridIncreaseOp>(Icon::Plus),
+            separator::separator(separator::SeparatorProps::vertical()),
+            // Grid-snap toggle; highlights while snapping is on.
+            toolbar_op_button::<GridToggleSnapOp>(Icon::Magnet),
         ],
     )
+}
+
+/// Marker for the live grid-size readout in the viewport toolbar.
+#[derive(Component)]
+pub struct GridSizeLabel;
+
+/// A text readout of the current grid size, updated by
+/// [`update_grid_size_label`]. The font is filled in by that system from
+/// the editor font resource (the toolbar bundle has none to hand).
+fn grid_size_label() -> impl Bundle {
+    (
+        GridSizeLabel,
+        Text::new("1"),
+        TextFont {
+            font_size: tokens::FONT_SM,
+            ..Default::default()
+        },
+        TextColor(tokens::TEXT_SECONDARY),
+        Node {
+            align_self: AlignSelf::Center,
+            min_width: px(34.0),
+            ..Default::default()
+        },
+    )
+}
+
+/// Format a grid size for the toolbar readout, trimming a trailing
+/// `.0` so whole sizes show as `1`, `2` rather than `1.0`.
+fn format_grid_size(size: f32) -> String {
+    if size.fract() == 0.0 {
+        format!("{size:.0}")
+    } else {
+        // Powers of two below 1 are exact; default formatting renders
+        // them cleanly (e.g. 0.25, 0.0625).
+        format!("{size}")
+    }
+}
+
+/// Keep the toolbar grid readout in sync with the snap settings and give
+/// it the editor font (the toolbar bundle is built without one).
+pub fn update_grid_size_label(
+    snap: Res<SnapSettings>,
+    editor_font: Res<jackdaw_feathers::icons::EditorFont>,
+    mut labels: Query<(&mut Text, &mut TextFont), With<GridSizeLabel>>,
+) {
+    let text = format_grid_size(snap.grid_size());
+    for (mut label, mut font) in &mut labels {
+        if label.0 != text {
+            label.0 = text.clone();
+        }
+        if font.font != editor_font.0 {
+            font.font = editor_font.0.clone();
+        }
+    }
 }
 
 /// Spawn a square icon-only toolbar button bound to operator `Op`.
@@ -721,6 +789,7 @@ pub fn update_toolbar_button_variants(
     edit_mode: Res<EditMode>,
     active_tool: Res<ActiveTool>,
     gizmo_space: Res<GizmoSpace>,
+    snap: Res<SnapSettings>,
     active_modal: ActiveModalQuery,
     mut buttons: Query<(&ButtonOperatorCall, &mut ButtonVariant)>,
 ) {
@@ -755,6 +824,8 @@ pub fn update_toolbar_button_variants(
             *edit_mode == EditMode::BrushEdit(BrushEditMode::Knife)
         } else if call.id == PhysicsActivateOp::ID {
             *edit_mode == EditMode::Physics
+        } else if call.id == GridToggleSnapOp::ID {
+            snap.translate_snap
         } else {
             false
         };
@@ -905,120 +976,83 @@ fn editor_status_bar() -> impl Bundle {
 }
 
 pub fn inspector_components_content(icon_font: Handle<Font>) -> impl Bundle {
-    let save_font = icon_font.clone();
+    let save_font = icon_font;
+    // Outer horizontal row: [strip | content column]
     (
         Node {
-            flex_direction: FlexDirection::Column,
+            flex_direction: FlexDirection::Row,
             flex_grow: 1.0,
             min_height: px(0.0),
             ..Default::default()
         },
         children![
+            // Strip mount: the category tab rail is spawned here by the
+            // On<Add, InspectorCategoryStripMount> observer in InspectorPlugin.
+            (crate::inspector::category_strip::InspectorCategoryStripMount,),
+            // Content column: add-header + search header + scrollable card list.
             (
-                PieViewHeader,
                 Node {
                     flex_direction: FlexDirection::Column,
-                    width: percent(100),
-                    padding: UiRect::all(px(tokens::SPACING_SM)),
-                    row_gap: px(tokens::SPACING_XS),
-                    flex_shrink: 0.0,
-                    border_radius: BorderRadius::all(px(tokens::BORDER_RADIUS_SM)),
-                    ..Default::default()
-                },
-                BackgroundColor(Color::NONE),
-                children![
-                    (
-                        Node {
-                            flex_direction: FlexDirection::Row,
-                            align_items: AlignItems::Center,
-                            column_gap: px(tokens::SPACING_XS),
-                            width: percent(100),
-                            ..Default::default()
-                        },
-                        children![(
-                            Node {
-                                flex_grow: 1.0,
-                                ..Default::default()
-                            },
-                            children![(
-                                crate::inspector::InspectorSearch,
-                                text_edit::text_edit(
-                                    TextEditProps::default()
-                                        .with_placeholder("Filter...")
-                                        .allow_empty()
-                                ),
-                            )],
-                        ),],
-                    ),
-                    (
-                        crate::inspector::AddComponentButton,
-                        Interaction::default(),
-                        Node {
-                            flex_direction: FlexDirection::Row,
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            width: percent(100),
-                            height: px(tokens::ROW_HEIGHT),
-                            column_gap: px(tokens::SPACING_SM),
-                            border_radius: BorderRadius::all(px(tokens::BORDER_RADIUS_MD)),
-                            flex_shrink: 0.0,
-                            ..Default::default()
-                        },
-                        BackgroundColor(tokens::ELEVATED_BG),
-                        observe(
-                            |hover: On<Pointer<Over>>, mut bg: Query<&mut BackgroundColor>| {
-                                if let Ok(mut bg) = bg.get_mut(hover.event_target()) {
-                                    bg.0 = tokens::TOOLBAR_ACTIVE_BG;
-                                }
-                            },
-                        ),
-                        observe(
-                            |out: On<Pointer<Out>>, mut bg: Query<&mut BackgroundColor>| {
-                                if let Ok(mut bg) = bg.get_mut(out.event_target()) {
-                                    bg.0 = tokens::ELEVATED_BG;
-                                }
-                            },
-                        ),
-                        children![
-                            (
-                                Text::new(String::from(Icon::PackagePlus.unicode())),
-                                TextFont {
-                                    font: icon_font,
-                                    font_size: tokens::ICON_SM,
-                                    ..Default::default()
-                                },
-                                TextColor(tokens::TEXT_PRIMARY),
-                            ),
-                            (
-                                LocalizedText::new("add-component"),
-                                TextFont {
-                                    font_size: tokens::TEXT_SIZE,
-                                    weight: FontWeight::MEDIUM,
-                                    ..Default::default()
-                                },
-                                TextColor(tokens::TEXT_PRIMARY),
-                            ),
-                        ],
-                        observe(|click: On<Pointer<Click>>, mut commands: Commands| {
-                            commands.trigger(jackdaw_feathers::button::ButtonClickEvent {
-                                entity: click.event_target(),
-                            });
-                        },),
-                    ),
-                    save_to_scene_button(save_font),
-                ],
-            ),
-            (
-                Inspector,
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(tokens::SPACING_SM),
-                    overflow: Overflow::scroll_y(),
                     flex_grow: 1.0,
                     min_height: px(0.0),
-                    padding: UiRect::all(px(tokens::SPACING_SM)),
                     ..Default::default()
-                }
+                },
+                children![
+                    // Add-header mount: per-category add UI populated by
+                    // `rebuild_add_header` whenever `ActiveInspectorCategory` changes.
+                    (crate::inspector::add_header::InspectorAddHeaderMount,),
+                    (
+                        PieViewHeader,
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            width: percent(100),
+                            padding: UiRect::all(px(tokens::SPACING_SM)),
+                            row_gap: px(tokens::SPACING_XS),
+                            flex_shrink: 0.0,
+                            border_radius: BorderRadius::all(px(tokens::BORDER_RADIUS_SM)),
+                            ..Default::default()
+                        },
+                        BackgroundColor(Color::NONE),
+                        children![
+                            (
+                                Node {
+                                    flex_direction: FlexDirection::Row,
+                                    align_items: AlignItems::Center,
+                                    column_gap: px(tokens::SPACING_XS),
+                                    width: percent(100),
+                                    ..Default::default()
+                                },
+                                children![(
+                                    Node {
+                                        flex_grow: 1.0,
+                                        ..Default::default()
+                                    },
+                                    children![(
+                                        crate::inspector::InspectorSearch,
+                                        text_edit::text_edit(
+                                            TextEditProps::default()
+                                                .with_placeholder("Filter...")
+                                                .allow_empty()
+                                        ),
+                                    )],
+                                ),],
+                            ),
+                            save_to_scene_button(save_font),
+                        ],
+                    ),
+                    (
+                        Inspector,
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(tokens::SPACING_SM),
+                            overflow: Overflow::scroll_y(),
+                            flex_grow: 1.0,
+                            min_height: px(0.0),
+                            padding: UiRect::all(px(tokens::SPACING_SM)),
+                            ..Default::default()
+                        }
+                    ),
+                ],
             ),
         ],
     )

@@ -2,13 +2,14 @@
 
 use bevy::prelude::*;
 use bevy::ui::ui_transform::UiGlobalTransform;
-use bevy_enhanced_input::prelude::{Press, *};
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
 use jackdaw_api_internal::lifecycle::ActiveModalOperator;
 use jackdaw_geometry::halfedge::ops::loop_cut::loop_cut;
 use jackdaw_geometry::halfedge::{EdgeKey, HalfedgeMesh, VertKey};
 use jackdaw_jsn::Brush;
 
+use super::modal_edit::ModalTopologyEdit;
 use crate::brush::{BrushEditMode, BrushHalfedge, BrushSelection, EditMode};
 use crate::core_extension::CoreExtensionInputContext;
 use crate::snapping::SnapSettings;
@@ -25,17 +26,9 @@ pub struct LoopCutPreviewLines {
 pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
     ctx.register_operator::<BrushLoopCutOp>();
 
-    let ext = ctx.id();
-    ctx.entity_mut().world_scope(|world| {
-        world.spawn((
-            Action::<BrushLoopCutOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(
-                KeyCode::KeyR.with_mod_keys(ModKeys::CONTROL),
-                Press::default(),
-            )],
-        ));
-    });
+    ctx.bind_operator::<CoreExtensionInputContext, BrushLoopCutOp>([
+        PresetInput::key("KeyR").ctrl()
+    ]);
 }
 
 /// Modal state for the loop cut operator.
@@ -45,12 +38,18 @@ pub struct LoopCutModalState {
     pub brush_entity: Option<Entity>,
     pub start_edge_key: Option<EdgeKey>,
     pub current_t: f32,
-    pub start_brush: Option<Brush>,
-    pub start_mesh: Option<HalfedgeMesh>,
+    /// Pre-edit snapshot driving restore and the commit-time cut. The preview
+    /// gizmo also reads its snapshot half-edge mesh so `start_edge_key` stays
+    /// valid for the whole modal.
+    pub edit: Option<ModalTopologyEdit>,
     /// Window-space pixel position of the start edge's canonical `v[0]`.
     pub start_v0_window: Vec2,
     /// Window-space pixel position of the start edge's canonical `v[1]`.
     pub start_v1_window: Vec2,
+    /// World-space endpoints of the start edge, used to place the "MID"
+    /// label at the loop's position along the edge.
+    pub start_a_world: Vec3,
+    pub start_b_world: Vec3,
 }
 
 /// Insert a new edge loop across a strip of quad faces. Walks the edge ring
@@ -78,6 +77,7 @@ pub(crate) fn brush_loop_cut(
     mut preview_lines: ResMut<LoopCutPreviewLines>,
     mouse: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    modal_inputs: crate::modal_inputs::ModalInputs,
     cursor: crate::viewport::UiCursorPos,
     camera_query: Query<(&Camera, &GlobalTransform), With<MainViewportCamera>>,
     viewport_query: Query<(&ComputedNode, &UiGlobalTransform), With<SceneViewport>>,
@@ -124,17 +124,24 @@ pub(crate) fn brush_loop_cut(
             &viewport_query,
         );
 
-        // Snapshot the HalfedgeMesh before any mutation.
-        let mesh_snapshot = halfedge.mesh.clone();
+        // World-space endpoints of the start edge for the "MID" label.
+        let (a_world, b_world) = match brush_transforms.get(brush_entity) {
+            Ok(g) => (
+                g.transform_point(halfedge.mesh.verts.get(va).map_or(Vec3::ZERO, |v| v.co)),
+                g.transform_point(halfedge.mesh.verts.get(vb).map_or(Vec3::ZERO, |v| v.co)),
+            ),
+            Err(_) => (Vec3::ZERO, Vec3::ZERO),
+        };
 
         modal_state.active = true;
         modal_state.brush_entity = Some(brush_entity);
         modal_state.start_edge_key = Some(edge_key);
         modal_state.current_t = 0.5;
-        modal_state.start_brush = Some(brush_before);
-        modal_state.start_mesh = Some(mesh_snapshot);
+        modal_state.edit = Some(ModalTopologyEdit::begin(&brush_before, halfedge));
         modal_state.start_v0_window = v0_window;
         modal_state.start_v1_window = v1_window;
+        modal_state.start_a_world = a_world;
+        modal_state.start_b_world = b_world;
 
         // Draw the initial preview lines at t=0.5.
         update_preview_lines(&modal_state, &brush_transforms, &mut preview_lines);
@@ -145,9 +152,8 @@ pub(crate) fn brush_loop_cut(
     // --- Subsequent invokes: cancel, update t, preview, or commit ---
 
     // Cancel on Escape or RMB.
-    let escape = keyboard.just_pressed(KeyCode::Escape);
     let rmb = mouse.just_pressed(MouseButton::Right);
-    if escape || rmb {
+    if modal_inputs.cancel() || rmb {
         clear_modal(&mut modal_state, &mut preview_lines);
         return OperatorResult::Cancelled;
     }
@@ -184,45 +190,51 @@ pub(crate) fn brush_loop_cut(
             clear_modal(&mut modal_state, &mut preview_lines);
             return OperatorResult::Cancelled;
         };
-        if modal_state.start_brush.is_none() {
+        let Some(edit) = modal_state.edit.as_ref() else {
             clear_modal(&mut modal_state, &mut preview_lines);
             return OperatorResult::Cancelled;
-        }
+        };
         let t = modal_state.current_t;
 
+        let Ok(brush_mut) = brushes.get_mut(brush_entity) else {
+            clear_modal(&mut modal_state, &mut preview_lines);
+            return OperatorResult::Cancelled;
+        };
         let Ok(mut halfedge) = halfedge_q.get_mut(brush_entity) else {
             clear_modal(&mut modal_state, &mut preview_lines);
             return OperatorResult::Cancelled;
         };
+        let brush = brush_mut.into_inner();
 
-        // Restore HalfedgeMesh to start snapshot before running the real cut.
-        if let Some(ref snap) = modal_state.start_mesh {
-            halfedge.mesh = snap.clone();
-        }
+        // Source new split faces from the brush's last face (matching the prior
+        // grow-loop template), keeping its UV axes; the seam then recomputes
+        // every plane.
+        let source = edit
+            .snapshot_brush()
+            .faces
+            .last()
+            .cloned()
+            .unwrap_or_default();
+        let original_face_count = edit.snapshot_brush().faces.len();
 
-        // Run the HalfedgeMesh op at the chosen t.
-        let result = loop_cut(&mut halfedge.mesh, edge_key, t);
-        let Ok(loop_cut_result) = result else {
-            clear_modal(&mut modal_state, &mut preview_lines);
-            return OperatorResult::Cancelled;
-        };
-
-        // Resolve the topology vertex index for each EdgeKey in the new loop
-        // ring so we can write the result into `BrushSelection.edges` after the
-        // flatten/re-lift roundtrip. Topology vertex order matches HalfedgeMesh
-        // slotmap iteration order (see `flatten_to_topology`), and loop_cut
-        // never removes verts, so the slotmap position taken now is the same
-        // index the post-flatten topology will use.
-        let mut new_loop_edge_pairs: Vec<(usize, usize)> =
-            Vec::with_capacity(loop_cut_result.new_loop_edges.len());
-        {
+        // Restore to the snapshot, run the cut at the chosen t, and reconcile.
+        // The closure resolves each new loop-ring edge's topology vertex pair
+        // before flatten, while slotmap iteration order still matches what the
+        // flatten will use (loop_cut never removes verts, so the indices hold).
+        // Returns `None` if the cut fails so the commit can cancel.
+        let new_loop_edge_pairs = edit.apply(brush, &mut halfedge, |mesh| {
+            let Ok(loop_cut_result) = loop_cut(mesh, edge_key, t) else {
+                return None;
+            };
             let mut vk_to_topo: std::collections::HashMap<VertKey, usize> =
-                std::collections::HashMap::with_capacity(halfedge.mesh.verts.len());
-            for (i, (k, _)) in halfedge.mesh.verts.iter().enumerate() {
+                std::collections::HashMap::with_capacity(mesh.verts.len());
+            for (i, (k, _)) in mesh.verts.iter().enumerate() {
                 vk_to_topo.insert(k, i);
             }
+            let mut pairs: Vec<(usize, usize)> =
+                Vec::with_capacity(loop_cut_result.new_loop_edges.len());
             for ek in &loop_cut_result.new_loop_edges {
-                let edge = &halfedge.mesh.edges[*ek];
+                let edge = &mesh.edges[*ek];
                 let Some(&a) = vk_to_topo.get(&edge.v[0]) else {
                     continue;
                 };
@@ -230,68 +242,22 @@ pub(crate) fn brush_loop_cut(
                     continue;
                 };
                 let pair = if a < b { (a, b) } else { (b, a) };
-                new_loop_edge_pairs.push(pair);
+                pairs.push(pair);
             }
-        }
+            Some(pairs)
+        });
 
-        // Re-cache all face normals.
-        let face_keys_all: Vec<_> = halfedge.mesh.faces.keys().collect();
-        for fk in face_keys_all {
-            let face = &halfedge.mesh.faces[fk];
-            let mut ring_positions = Vec::with_capacity(face.loop_count as usize);
-            let mut cur = face.loop_first;
-            for _ in 0..face.loop_count {
-                let lp = &halfedge.mesh.loops[cur];
-                ring_positions.push(halfedge.mesh.verts[lp.vert].co);
-                cur = lp.next;
-            }
-            let new_normal = jackdaw_geometry::newell_normal(&ring_positions);
-            halfedge.mesh.faces[fk].normal_cache = new_normal;
-        }
-
-        // Flatten HalfedgeMesh -> topology, sync Brush.
-        let new_topology = halfedge.mesh.flatten_to_topology();
-        let Ok(mut brush) = brushes.get_mut(brush_entity) else {
+        let Some(new_loop_edge_pairs) = new_loop_edge_pairs else {
             clear_modal(&mut modal_state, &mut preview_lines);
             return OperatorResult::Cancelled;
         };
 
-        // Extend brush.faces for any new faces added by the loop cut.
-        let new_face_count = new_topology.polygons.len();
-        while brush.faces.len() < new_face_count {
-            let template = brush.faces.last().cloned().unwrap_or_default();
-            brush.faces.push(template);
+        // Each new split face inherits the source face's appearance.
+        for new_face in original_face_count..brush.faces.len() {
+            brush.faces[new_face].copy_appearance_from(&source);
+            brush.faces[new_face].ensure_uv_axes();
         }
 
-        // Update plane data per face from new topology.
-        let positions: Vec<Vec3> = new_topology.vertices.iter().map(|v| v.position).collect();
-        for (face_idx, face_data) in brush.faces.iter_mut().enumerate() {
-            if face_idx < new_topology.polygons.len() {
-                let normal = new_topology.face_normal_with(&positions, face_idx);
-                let v0_idx = new_topology.loops[new_topology.polygons[face_idx].loop_start as usize]
-                    .vert as usize;
-                let distance = positions[v0_idx].dot(normal);
-                face_data.plane.normal = normal;
-                face_data.plane.distance = distance;
-            }
-        }
-        brush.topology = new_topology;
-
-        // Re-lift HalfedgeMesh from the new topology so vert_keys / face_keys are consistent.
-        let new_mesh = HalfedgeMesh::lift_from_topology(&brush.topology);
-        let new_vert_keys: Vec<_> = new_mesh.verts.keys().collect();
-        let mut new_face_keys = vec![Default::default(); new_mesh.faces.len()];
-        for (k, f) in new_mesh.faces.iter() {
-            let slot = f.material_idx as usize;
-            if slot < new_face_keys.len() {
-                new_face_keys[slot] = k;
-            }
-        }
-        halfedge.mesh = new_mesh;
-        halfedge.vert_keys = new_vert_keys;
-        halfedge.face_keys = new_face_keys;
-
-        // Push undo entry.
         // Chain selection: write the newly created loop ring edges into
         // `BrushSelection.edges` so a follow-up gesture (loop cut again,
         // edge slide, etc.) can operate on the new ring immediately.
@@ -319,26 +285,11 @@ fn cancel_loop_cut(
     mut halfedge_q: Query<&mut BrushHalfedge>,
 ) {
     if let Some(brush_entity) = modal_state.brush_entity
-        && let Some(ref start_brush) = modal_state.start_brush
+        && let Some(edit) = modal_state.edit.as_ref()
         && let Ok(mut brush) = brushes.get_mut(brush_entity)
+        && let Ok(mut halfedge) = halfedge_q.get_mut(brush_entity)
     {
-        *brush = start_brush.clone();
-        // Re-lift HalfedgeMesh from the restored topology to keep keys consistent.
-        if let Ok(mut halfedge) = halfedge_q.get_mut(brush_entity) {
-            let mesh = HalfedgeMesh::lift_from_topology(&start_brush.topology);
-            let vert_keys: Vec<_> = mesh.verts.keys().collect();
-            let mut face_keys: Vec<jackdaw_geometry::halfedge::FaceKey> =
-                vec![Default::default(); mesh.faces.len()];
-            for (k, f) in mesh.faces.iter() {
-                let slot = f.material_idx as usize;
-                if slot < face_keys.len() {
-                    face_keys[slot] = k;
-                }
-            }
-            halfedge.mesh = mesh;
-            halfedge.vert_keys = vert_keys;
-            halfedge.face_keys = face_keys;
-        }
+        edit.restore(&mut brush, &mut halfedge);
     }
     clear_modal(&mut modal_state, &mut preview_lines);
 }
@@ -364,14 +315,14 @@ fn update_preview_lines(
     let Some(edge_key) = modal_state.start_edge_key else {
         return;
     };
-    let Some(ref start_mesh) = modal_state.start_mesh else {
+    let Some(edit) = modal_state.edit.as_ref() else {
         return;
     };
     let Ok(brush_xform) = brush_transforms.get(brush_entity) else {
         return;
     };
 
-    let mut speculative = start_mesh.clone();
+    let mut speculative = edit.snapshot_halfedge().mesh.clone();
     let Ok(cut_result) = loop_cut(&mut speculative, edge_key, modal_state.current_t) else {
         return;
     };
@@ -447,4 +398,84 @@ fn snap_to_fractions(t: f32) -> f32 {
 pub(crate) fn can_run_loop_cut(edit_mode: Res<EditMode>, selection: Res<BrushSelection>) -> bool {
     *edit_mode == EditMode::BrushEdit(BrushEditMode::Edge)
         && selection.active_sub().is_some_and(|s| !s.edges.is_empty())
+}
+
+/// Marks the floating "MID" badge shown while a loop cut is snapped to
+/// the middle of its edge.
+#[derive(Component)]
+pub struct LoopCutMidLabel;
+
+/// Show a small "MID" badge at the loop position while the loop cut is
+/// snapped to the middle of the edge (t = 0.5). Mirrors the measure
+/// tool's world-to-panel label placement.
+pub fn update_loop_cut_mid_label(
+    mut commands: Commands,
+    modal_state: Res<LoopCutModalState>,
+    cameras: Query<(&Camera, &GlobalTransform), With<MainViewportCamera>>,
+    viewports: Query<(Entity, &ComputedNode), With<SceneViewport>>,
+    editor_font: Res<jackdaw_feathers::icons::EditorFont>,
+    mut labels: Query<(&mut Node, &mut Visibility, &mut TextFont), With<LoopCutMidLabel>>,
+) {
+    let at_mid = modal_state.active && (modal_state.current_t - 0.5).abs() < 1.0e-3;
+
+    if !at_mid {
+        if let Ok((_, mut vis, _)) = labels.single_mut() {
+            *vis = Visibility::Hidden;
+        }
+        return;
+    }
+
+    let Ok((camera, cam_tf)) = cameras.single() else {
+        return;
+    };
+    let Ok((viewport_entity, viewport_node)) = viewports.single() else {
+        return;
+    };
+
+    // Spawn the badge the first time it is needed, parented to the
+    // viewport panel so its absolute position is panel-local.
+    if labels.is_empty() {
+        commands.spawn((
+            LoopCutMidLabel,
+            crate::EditorEntity,
+            crate::NonSerializable,
+            Text::new("MID"),
+            TextFont {
+                font: editor_font.0.clone(),
+                font_size: jackdaw_feathers::tokens::FONT_SM,
+                ..default()
+            },
+            TextColor(jackdaw_feathers::tokens::TEXT_ACCENT),
+            Node {
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            Visibility::Hidden,
+            ChildOf(viewport_entity),
+        ));
+        return;
+    }
+    let Ok((mut node, mut vis, mut font)) = labels.single_mut() else {
+        return;
+    };
+
+    let mid = modal_state
+        .start_a_world
+        .lerp(modal_state.start_b_world, modal_state.current_t);
+    let vp_node_size = viewport_node.size();
+    let scale = viewport_node.inverse_scale_factor();
+    let render_target_size = camera
+        .logical_viewport_size()
+        .unwrap_or(vp_node_size * scale);
+    if let Ok(vp_coords) = camera.world_to_viewport(cam_tf, mid) {
+        let ui_pos = vp_coords * vp_node_size / render_target_size * scale;
+        node.left = Val::Px(ui_pos.x + 8.0);
+        node.top = Val::Px(ui_pos.y - 8.0);
+        *vis = Visibility::Inherited;
+    } else {
+        *vis = Visibility::Hidden;
+    }
+    if font.font != editor_font.0 {
+        font.font = editor_font.0.clone();
+    }
 }

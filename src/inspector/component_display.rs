@@ -35,96 +35,16 @@ use jackdaw_geometry::is_convex_topology;
 use jackdaw_runtime::EditorCategory;
 
 use super::{
-    AddComponentButton, ComponentDisplay, ComponentDisplayBody, ComponentName, ComponentPicker,
-    Inspector, InspectorDirty, InspectorFieldRow, InspectorGroupSection, InspectorSearch,
-    InspectorTarget, ReflectDisplayable, brush_display, component_tooltip::ReflectedTypeTooltip,
-    custom_props_display, extract_module_group, material_display, reflect_fields,
+    ComponentDisplay, ComponentDisplayBody, ComponentDisplayTypePath, ComponentName,
+    ComponentPicker, Inspector, InspectorDirty, InspectorGroupSection, InspectorSearch,
+    InspectorTarget, ReflectDisplayable, brush_display, category_strip::ActiveInspectorCategory,
+    component_tooltip::ReflectedTypeTooltip, custom_props_display, extract_module_group,
+    material_display, modifier_display, reflect_fields,
 };
+use crate::inspector::prefab_field_dots::{PrefabInstanceCtx, inspector_type_paths_for};
 use crate::prefab::PrefabAstCache;
 use bevy::picking::hover::Hovered;
 use jackdaw_jsn::SceneJsnAst;
-
-/// Resolved prefab-instance context for a component being inspected. When
-/// present, override info comes from the prefab AST + cache and the
-/// header's revert / right-click actions route to the new prefab
-/// operators rather than the legacy baseline path.
-#[derive(Clone)]
-pub(crate) struct PrefabInstanceCtx {
-    pub(crate) entity_key: usize,
-    pub(crate) instance_root: usize,
-    /// ECS entity for the prefab-instance root. Prefab operators
-    /// resolve their AST keys post-snapshot-install, so dispatch sites
-    /// pass this Entity rather than the (stale) `instance_root` key.
-    pub(crate) instance_entity: Entity,
-    pub(crate) prefab_path: std::path::PathBuf,
-    pub(crate) prefab_entity_id: u32,
-    pub(crate) has_cached_prefab: bool,
-}
-
-/// Marker on the override-status dot rendered next to a prefab-instance
-/// field row. Carries the data needed to call `revert_field` on click.
-/// Filled = override; hollow = inherited from prefab.
-#[derive(Component, Clone)]
-pub(crate) struct PrefabFieldOverrideDot {
-    /// ECS entity the row belongs to. The dispatcher passes this through
-    /// to `prefab.revert_field`, which resolves the AST key inside the
-    /// operator (the live AST is rebuilt during the framework's
-    /// before-snapshot capture, so any pre-resolved key is stale).
-    pub(crate) entity: Entity,
-    pub(crate) entity_key: usize,
-    pub(crate) type_path: String,
-    pub(crate) field_path: String,
-}
-
-/// Compute the set of component type paths to treat as "AST-tracked"
-/// for inspector filtering. For ECS-only inherited descendants of a
-/// prefab instance (entity has `PrefabEntityId` but no AST node), the
-/// AST has nothing to anchor on; fall back to the matching entry in the
-/// prefab cache so the inspector still has a baseline component set to
-/// render against.
-fn inspector_type_paths_for(
-    ast: &SceneJsnAst,
-    prefab_cache: &PrefabAstCache,
-    source_entity: Entity,
-    entity_ref: bevy::ecs::world::EntityRef,
-    child_of_query: &Query<&bevy::ecs::hierarchy::ChildOf>,
-    isa_query: &Query<&crate::prefab::IsA>,
-) -> HashSet<String> {
-    if let Some(node) = ast.node_for_entity(source_entity) {
-        return node.components.keys().cloned().collect();
-    }
-    let Some(peid) = entity_ref.get::<crate::prefab::PrefabEntityId>() else {
-        return HashSet::new();
-    };
-    // Walk up ChildOf to find the nearest ancestor with IsA.
-    let mut current = source_entity;
-    let isa_source = loop {
-        let Ok(child_of) = child_of_query.get(current) else {
-            return HashSet::new();
-        };
-        let parent = child_of.0;
-        if let Ok(isa) = isa_query.get(parent) {
-            break isa.source.clone();
-        }
-        current = parent;
-    };
-    let Some(prefab) = prefab_cache.get(&isa_source) else {
-        return HashSet::new();
-    };
-    let prefab_entity_id_type = "jackdaw::prefab::components::PrefabEntityId";
-    for node in &prefab.nodes {
-        let matches = node
-            .components
-            .get(prefab_entity_id_type)
-            .and_then(serde_json::Value::as_u64)
-            .map(|u| u as u32)
-            == Some(peid.0);
-        if matches {
-            return node.components.keys().cloned().collect();
-        }
-    }
-    HashSet::new()
-}
 
 pub(crate) fn add_component_displays(
     _: On<Add, Selected>,
@@ -142,6 +62,7 @@ pub(crate) fn add_component_displays(
     prefab_cache: Res<PrefabAstCache>,
     child_of_query: Query<&bevy::ecs::hierarchy::ChildOf>,
     isa_query: Query<&crate::prefab::IsA>,
+    collapse_state: Res<super::InspectorCollapseState>,
 ) {
     let Some(primary) = selection.primary() else {
         return;
@@ -183,6 +104,7 @@ pub(crate) fn add_component_displays(
             &jsn_type_paths,
             Some(&ast),
             Some(&prefab_cache),
+            &collapse_state,
         );
 
         // Set up monitoring: watch the selected entity for InspectorDirty
@@ -215,6 +137,7 @@ pub(crate) fn build_inspector_displays(
     jsn_type_paths: &HashSet<String>,
     scene_ast: Option<&SceneJsnAst>,
     prefab_cache: Option<&PrefabAstCache>,
+    collapse_state: &super::InspectorCollapseState,
 ) {
     // Show multi-selection header when multiple entities are selected
     if selection_count > 1 {
@@ -284,6 +207,8 @@ pub(crate) fn build_inspector_displays(
                 let full_path = table.path();
                 if full_path.starts_with("jackdaw")
                     && !full_path.starts_with("jackdaw_jsn")
+                    && !full_path.starts_with("jackdaw_geometry")
+                    && !full_path.starts_with("jackdaw::reference_image")
                     && !full_path.starts_with("jackdaw_avian_integration")
                     && !full_path.starts_with("jackdaw_animation")
                     && !full_path.starts_with("jackdaw_multiplayer")
@@ -339,6 +264,8 @@ pub(crate) fn build_inspector_displays(
             let name = components.get_name(component_id)?;
             if name.starts_with("jackdaw")
                 && !name.starts_with("jackdaw_jsn")
+                && !name.starts_with("jackdaw_geometry")
+                && !name.starts_with("jackdaw::reference_image")
                 && !name.starts_with("jackdaw_avian_integration")
                 && !name.starts_with("jackdaw_animation")
             {
@@ -377,58 +304,7 @@ pub(crate) fn build_inspector_displays(
             .then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase()))
     });
 
-    // Spawn components with subtle group dividers
-    let mut current_group = String::new();
-    for (name, module_group, component_id, type_path) in &comp_list {
-        // Category group divider with icon
-        if *module_group != current_group {
-            current_group = module_group.clone();
-            let group_icon = if custom_groups.contains(module_group) {
-                Icon::Tag
-            } else {
-                Icon::Package
-            };
-            commands.spawn((
-                ComponentDisplay,
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    column_gap: Val::Px(tokens::SPACING_SM),
-                    width: Val::Percent(100.0),
-                    padding: UiRect::new(
-                        Val::Px(tokens::SPACING_XS),
-                        Val::ZERO,
-                        Val::Px(tokens::SPACING_MD),
-                        Val::ZERO,
-                    ),
-                    ..Default::default()
-                },
-                ChildOf(inspector_entity),
-                children![
-                    (
-                        Text::new(String::from(group_icon.unicode())),
-                        TextFont {
-                            font: icon_font.0.clone(),
-                            font_size: tokens::TEXT_SIZE,
-                            ..Default::default()
-                        },
-                        TextColor(tokens::TEXT_SECONDARY),
-                    ),
-                    (
-                        Text::new(module_group.clone()),
-                        TextFont {
-                            font: editor_font.0.clone(),
-                            font_size: tokens::FONT_SM,
-                            weight: FontWeight::MEDIUM,
-                            ..Default::default()
-                        },
-                        TextColor(tokens::TEXT_SECONDARY),
-                    ),
-                ],
-            ));
-        }
-
+    for (name, _module_group, component_id, type_path) in &comp_list {
         let component_id = *component_id;
 
         // Detect override: compare current component value vs baseline
@@ -479,6 +355,50 @@ pub(crate) fn build_inspector_displays(
         let spec_prefab_ctx = prefab_ctx.clone();
         let revert_through_prefab = is_overridden_prefab;
 
+        // ModifierStack gets its own top-level cards (one per modifier entry)
+        // rather than a single generic wrapper. Detect it here, before creating
+        // the generic card, and emit per-modifier cards directly under the
+        // inspector scroll body.
+        if *type_path == *<jackdaw_geometry::ModifierStack as bevy::reflect::TypePath>::type_path()
+        {
+            let type_id = components
+                .get_info(component_id)
+                .and_then(ComponentInfo::type_id);
+            if let Some(type_id) = type_id
+                && let Some(registration) = registry.get(type_id)
+                && let Some(reflect_component) = registration.data::<ReflectComponent>()
+                && let Some(reflected) = reflect_component.reflect(entity_ref)
+                && let Some(stack) = reflected.downcast_ref::<jackdaw_geometry::ModifierStack>()
+            {
+                modifier_display::spawn_modifier_display(
+                    commands,
+                    inspector_entity,
+                    source_entity,
+                    stack,
+                    names,
+                    type_registry,
+                    &editor_font.0,
+                    &icon_font.0,
+                    collapse_state,
+                );
+            }
+            continue;
+        }
+
+        // MeshMaterial3d<StandardMaterial> gets four dedicated material cards
+        // (Preview, Surface, Textures, Settings) rather than a single generic
+        // wrapper. Skip the generic card and inject the four cards directly.
+        if *type_path == BRUSH_MATERIAL_TYPE_PATH {
+            material_display::inject_material_cards(
+                commands,
+                source_entity,
+                inspector_entity,
+                &icon_font.0,
+                collapse_state,
+            );
+            continue;
+        }
+
         let (display_entity, body_entity) = spawn_component_display(
             commands,
             ComponentDisplaySpec {
@@ -491,6 +411,7 @@ pub(crate) fn build_inspector_displays(
                 revert_through_prefab,
                 icon_font: &icon_font.0,
                 editor_font: &editor_font.0,
+                collapse_state,
             },
         );
         commands
@@ -516,17 +437,7 @@ pub(crate) fn build_inspector_displays(
                 continue;
             }
 
-            // Priority 2: MeshMaterial3d<StandardMaterial>, display material fields
-            if type_id == TypeId::of::<MeshMaterial3d<StandardMaterial>>() {
-                material_display::spawn_material_display_deferred(
-                    commands,
-                    body_entity,
-                    source_entity,
-                );
-                continue;
-            }
-
-            // Priority 3: CustomProperties, specialized property editor
+            // Priority 2: CustomProperties, specialized property editor
             if type_id == TypeId::of::<CustomProperties>() {
                 if let Some(cp) = reflected.downcast_ref::<CustomProperties>() {
                     custom_props_display::spawn_custom_properties_display(
@@ -609,20 +520,34 @@ pub(crate) fn build_inspector_displays(
 
     // Add Component button is in the static layout header (layout.rs entity_inspector)
     // so we don't spawn a dynamic one here.
+
+    // If the selected entity is a brush, inject the four material cards into the
+    // Material tab. The brush entity itself carries no MeshMaterial3d; its face
+    // data carries the handles. Shells are spawned synchronously (same flush as
+    // every other card) so the "material" category is present on the rebuild
+    // frame before `resolve_active_on_rebuild` runs. Body fills are deferred.
+    if entity_ref.contains::<crate::brush::Brush>() {
+        material_display::inject_material_cards(
+            commands,
+            source_entity,
+            inspector_entity,
+            &icon_font.0,
+            collapse_state,
+        );
+    }
 }
+
+/// The type path used to route the brush material card to the Material inspector tab.
+/// Also the `ComponentDisplayTypePath` of the entity-bound `MeshMaterial3d` card,
+/// so a targeted refresh keyed on this string finds both material card variants.
+pub(crate) const BRUSH_MATERIAL_TYPE_PATH: &str =
+    "bevy_pbr::mesh_material::MeshMaterial3d<bevy_pbr::pbr_material::StandardMaterial>";
 
 pub(crate) fn remove_component_displays(
     _: On<Remove, Selected>,
     mut commands: Commands,
     inspectors: Query<(Entity, Option<&Children>), With<Inspector>>,
-    displays: Query<
-        Entity,
-        Or<(
-            With<ComponentDisplay>,
-            With<AddComponentButton>,
-            With<ComponentPicker>,
-        )>,
-    >,
+    displays: Query<Entity, Or<(With<ComponentDisplay>, With<ComponentPicker>)>>,
 ) {
     // Multi-instance: every inspector tab needs its own monitoring
     // teardown and its own children despawned.
@@ -664,19 +589,13 @@ pub(crate) fn on_inspector_dirty(
     names: Query<&Name>,
     icon_font: Res<IconFont>,
     editor_font: Res<EditorFont>,
-    displays: Query<
-        Entity,
-        Or<(
-            With<ComponentDisplay>,
-            With<AddComponentButton>,
-            With<ComponentPicker>,
-        )>,
-    >,
+    displays: Query<Entity, Or<(With<ComponentDisplay>, With<ComponentPicker>)>>,
     materials: Res<Assets<StandardMaterial>>,
     ast: Res<jackdaw_jsn::SceneJsnAst>,
     prefab_cache: Res<PrefabAstCache>,
     child_of_query: Query<&bevy::ecs::hierarchy::ChildOf>,
     isa_query: Query<&crate::prefab::IsA>,
+    collapse_state: Res<super::InspectorCollapseState>,
 ) {
     // Multi-instance: rebuild every Inspector tab in lockstep. Each
     // inspector entity carries its own `InspectorTarget`; the dirty
@@ -684,10 +603,7 @@ pub(crate) fn on_inspector_dirty(
     // and applies to every inspector watching that source.
     let mut clear_dirty_for: Option<Entity> = None;
     for (inspector_entity, target, children) in &inspectors {
-        let source_entity = target.0;
-        if clear_dirty_for.is_none() {
-            clear_dirty_for = Some(source_entity);
-        }
+        let mut source_entity = target.0;
 
         // Collect the old display children, then queue a
         // world-exclusive closure that despawns them synchronously.
@@ -710,10 +626,31 @@ pub(crate) fn on_inspector_dirty(
             }
         });
 
-        // Rebuild this inspector's contents.
-        let Ok((archetype, entity_ref)) = entity_query.get(source_entity) else {
-            continue;
+        // Rebuild this inspector's contents. If the monitored target is gone
+        // (despawned/respawned by CSG, undo, or prefab install), fall back to
+        // the live primary selection and re-point this inspector, rather than
+        // despawning the cards and rebuilding an empty panel.
+        let (archetype, entity_ref) = match entity_query.get(source_entity) {
+            Ok(found) => found,
+            Err(_) => {
+                let Some(primary) = selection.primary() else {
+                    continue;
+                };
+                let Ok(found) = entity_query.get(primary) else {
+                    continue;
+                };
+                commands.entity(inspector_entity).insert((
+                    InspectorTarget(primary),
+                    Monitor(primary),
+                    NotifyAdded::<InspectorDirty>::default(),
+                ));
+                source_entity = primary;
+                found
+            }
         };
+        if clear_dirty_for.is_none() {
+            clear_dirty_for = Some(source_entity);
+        }
         let sel_count = selection.entities.len();
 
         let jsn_type_paths = inspector_type_paths_for(
@@ -742,6 +679,7 @@ pub(crate) fn on_inspector_dirty(
             &jsn_type_paths,
             Some(&ast),
             Some(&prefab_cache),
+            &collapse_state,
         );
     }
 
@@ -777,6 +715,9 @@ pub(crate) struct ComponentDisplaySpec<'a> {
     pub revert_through_prefab: bool,
     pub icon_font: &'a Handle<Font>,
     pub editor_font: &'a Handle<Font>,
+    /// Per-session collapsed-state map; used to restore the card's
+    /// open/closed state across inspector rebuilds.
+    pub collapse_state: &'a super::InspectorCollapseState,
 }
 
 pub(crate) fn spawn_component_display(
@@ -793,9 +734,17 @@ pub(crate) fn spawn_component_display(
         revert_through_prefab,
         icon_font,
         editor_font,
+        collapse_state,
     } = spec;
     let font = icon_font.clone();
     let body_font = editor_font.clone();
+
+    let collapsed = collapse_state.collapsed(name);
+    let body_display = if collapsed {
+        Display::None
+    } else {
+        Display::Flex
+    };
 
     let body_entity = commands
         .spawn((
@@ -810,6 +759,7 @@ pub(crate) fn spawn_component_display(
                 ),
                 flex_direction: FlexDirection::Column,
                 width: Val::Percent(100.0),
+                display: body_display,
                 ..Default::default()
             },
         ))
@@ -819,7 +769,8 @@ pub(crate) fn spawn_component_display(
         .spawn((
             ComponentDisplay,
             ComponentName(name.to_string()),
-            CollapsibleSection { collapsed: false },
+            ComponentDisplayTypePath(type_path.to_string()),
+            CollapsibleSection { collapsed },
             Node {
                 flex_direction: FlexDirection::Column,
                 width: Val::Percent(100.0),
@@ -1108,502 +1059,69 @@ pub(crate) fn spawn_component_display(
     (section_entity, body_entity)
 }
 
-/// Filter inspector components based on the search input.
+/// Filter inspector component cards based on both the active category and the
+/// search input. A card is visible only when its category matches the active
+/// category AND its short name passes the search text predicate (either the
+/// search field is empty or the name contains the filter string).
+///
+/// The system re-runs whenever the search text changes OR the active category
+/// changes. Group-section visibility follows: a group hides when all of its
+/// cards are hidden.
 pub(crate) fn filter_inspector_components(
-    search_query: Query<&TextEditValue, (With<InspectorSearch>, Changed<TextEditValue>)>,
-    components: Query<(Entity, &ComponentName), With<ComponentDisplay>>,
+    search_query: Query<&TextEditValue, With<InspectorSearch>>,
+    active: Res<ActiveInspectorCategory>,
+    registry: Res<jackdaw_api_internal::inspector::InspectorRegistry>,
+    components: Query<(Entity, &ComponentName, &ComponentDisplayTypePath), With<ComponentDisplay>>,
     groups: Query<(Entity, &Children), With<InspectorGroupSection>>,
     mut node_query: Query<&mut Node>,
+    changed_search: Query<(), (With<InspectorSearch>, Changed<TextEditValue>)>,
 ) {
-    let Ok(search) = search_query.single() else {
+    // Re-run only when the search text or the active category changed.
+    // Running every frame is cheap but this avoids unnecessary Node mutations.
+    if changed_search.is_empty() && !active.is_changed() {
         return;
-    };
-    let filter = search.0.trim().to_lowercase();
+    }
 
-    // Track which component entities are visible
+    let filter = search_query
+        .single()
+        .map(|v| v.0.trim().to_lowercase())
+        .unwrap_or_default();
+
+    let active_cat = active.0.as_ref();
+
+    // Track which component entities are visible.
     let mut visible_components: HashSet<Entity> = HashSet::new();
 
-    // Filter individual component displays by name
-    for (entity, comp_name) in &components {
-        let matches = filter.is_empty() || comp_name.0.to_lowercase().contains(&filter);
+    for (entity, comp_name, type_path) in &components {
+        let category_ok = registry.category_for(&type_path.0) == active_cat;
+        let search_ok = filter.is_empty() || comp_name.0.to_lowercase().contains(&filter);
+        let visible = category_ok && search_ok;
 
         if let Ok(mut node) = node_query.get_mut(entity) {
-            node.display = if matches {
+            node.display = if visible {
                 Display::Flex
             } else {
                 Display::None
             };
         }
 
-        if matches {
+        if visible {
             visible_components.insert(entity);
         }
     }
 
-    // Hide group sections where all children are hidden
+    // Hide group sections where all children are hidden.
     for (group_entity, children) in &groups {
         let has_visible_child = children
             .iter()
             .any(|child| visible_components.contains(&child));
 
         if let Ok(mut node) = node_query.get_mut(group_entity) {
-            node.display = if filter.is_empty() || has_visible_child {
+            node.display = if has_visible_child {
                 Display::Flex
             } else {
                 Display::None
             };
         }
     }
-}
-
-/// Revert a single component on a prefab instance back to its baseline value.
-pub(crate) fn revert_component_to_baseline(
-    In((entity, component_id)): In<(Entity, ComponentId)>,
-    world: &mut World,
-) {
-    use bevy::ecs::reflect::AppTypeRegistry;
-    use bevy::reflect::serde::TypedReflectDeserializer;
-    use serde::de::DeserializeSeed;
-
-    let Some(baseline) = world.get::<jackdaw_jsn::JsnPrefabBaseline>(entity).cloned() else {
-        return;
-    };
-
-    let Some(type_id) = world
-        .components()
-        .get_info(component_id)
-        .and_then(ComponentInfo::type_id)
-    else {
-        return;
-    };
-
-    let registry = world.resource::<AppTypeRegistry>().clone();
-    let registry = registry.read();
-
-    let Some(registration) = registry.get(type_id) else {
-        return;
-    };
-    let type_path = registration.type_info().type_path_table().path();
-
-    let Some(baseline_val) = baseline.components.get(type_path) else {
-        return;
-    };
-
-    let Some(reflect_component) = registration.data::<ReflectComponent>() else {
-        return;
-    };
-
-    let deserializer = TypedReflectDeserializer::new(registration, &registry);
-    let Ok(reflected) = deserializer.deserialize(baseline_val) else {
-        warn!("Failed to deserialize baseline for '{type_path}'");
-        return;
-    };
-
-    reflect_component.apply(world.entity_mut(entity), reflected.as_ref());
-
-    drop(registry);
-
-    // Trigger inspector rebuild
-    world.entity_mut(entity).insert(InspectorDirty);
-}
-
-/// Filled / hollow palette for the per-field override dot. Filled uses
-/// the same amber as `tokens::CATEGORY_PREFAB` so the dot reads in the
-/// same visual register as other prefab-related affordances.
-fn override_dot_color(overridden: bool) -> Color {
-    if overridden {
-        jackdaw_feathers::tokens::CATEGORY_PREFAB
-    } else {
-        Color::srgba(0.55, 0.55, 0.55, 0.45)
-    }
-}
-
-/// For every newly-spawned `InspectorFieldRow` whose source entity lives
-/// inside a prefab instance subtree, attach a small dot showing whether
-/// the field is overridden on this instance. Clicking the dot reverts
-/// the field via `revert_field`. Rows whose entity is not part of a
-/// prefab instance get no dot.
-pub(crate) fn decorate_prefab_field_rows(
-    new_rows: Query<(Entity, &InspectorFieldRow), Added<InspectorFieldRow>>,
-    ast: Res<SceneJsnAst>,
-    prefab_cache: Res<PrefabAstCache>,
-    mut commands: Commands,
-) {
-    for (row_entity, row) in &new_rows {
-        let Some(key) = ast.key_for_entity(row.source_entity) else {
-            continue;
-        };
-        if !crate::prefab::overrides::is_inside_prefab_instance(&ast, key) {
-            continue;
-        }
-        let overridden = crate::prefab::overrides::field_is_overridden(
-            &ast,
-            &prefab_cache,
-            key,
-            &row.type_path,
-            Some(&row.field_path),
-        );
-        let inheritance = crate::prefab::overrides::resolve_inheritance(&ast, key);
-        let instance_root_key =
-            ast.ancestor_with_component(key, "jackdaw::prefab::components::IsA");
-        let instance_entity = instance_root_key
-            .and_then(|k| ast.nodes.get(k))
-            .and_then(|n| n.ecs_entity);
-        if let (
-            Some((prefab_path, prefab_entity_id)),
-            Some(instance_root_key),
-            Some(instance_entity),
-        ) = (inheritance, instance_root_key, instance_entity)
-        {
-            let row_entity_param = row.source_entity;
-            let row_type_path = row.type_path.clone();
-            let row_field_path = row.field_path.clone();
-            commands.entity(row_entity).observe(
-                move |click: On<Pointer<Click>>,
-                      mut commands: Commands,
-                      windows: Query<&Window>,
-                      mut state: ResMut<jackdaw_widgets::context_menu::ContextMenuState>,
-                      mut target: ResMut<super::prefab_menu::PrefabMenuTarget>| {
-                    if click.event().button != PointerButton::Secondary {
-                        return;
-                    }
-                    let cursor_pos = windows
-                        .single()
-                        .ok()
-                        .and_then(bevy::prelude::Window::cursor_position)
-                        .unwrap_or_default();
-                    if let Some(existing) = state.menu_entity.take()
-                        && let Ok(mut ec) = commands.get_entity(existing)
-                    {
-                        ec.despawn();
-                    }
-                    target.entity = Some(row_entity_param);
-                    target.instance_entity = Some(instance_entity);
-                    target.entity_key = Some(key);
-                    target.instance_root = Some(instance_root_key);
-                    target.prefab_entity_id = Some(prefab_entity_id);
-                    target.prefab_path = Some(prefab_path.clone());
-                    target.type_path = Some(row_type_path.clone());
-                    target.field_path = Some(row_field_path.clone());
-                    let items: [(&str, &str); 2] = [
-                        (super::prefab_menu::REVERT_FIELD, "Revert Field"),
-                        (
-                            super::prefab_menu::APPLY_FIELD_TO_SOURCE,
-                            "Apply Field to Prefab Source",
-                        ),
-                    ];
-                    let menu = jackdaw_feathers::context_menu::spawn_context_menu(
-                        &mut commands,
-                        cursor_pos,
-                        None,
-                        &items,
-                    );
-                    state.menu_entity = Some(menu);
-                },
-            );
-        }
-
-        // Absolutely-positioned wrapper so the dot anchors to the row's
-        // right edge without disturbing the row's flex layout. Same
-        // approach `anim_diamond::decorate_animatable_fields` uses for
-        // its corner button. The dot itself is the wrapper's only
-        // child; sharing the wrapper keeps a single entity-level click
-        // observer driving the revert.
-        let wrapper = commands
-            .spawn(Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(2.0),
-                right: Val::Px(20.0),
-                ..default()
-            })
-            .id();
-
-        let dot = commands
-            .spawn((
-                PrefabFieldOverrideDot {
-                    entity: row.source_entity,
-                    entity_key: key,
-                    type_path: row.type_path.clone(),
-                    field_path: row.field_path.clone(),
-                },
-                Node {
-                    width: Val::Px(8.0),
-                    height: Val::Px(8.0),
-                    border_radius: BorderRadius::all(Val::Px(4.0)),
-                    ..default()
-                },
-                BackgroundColor(override_dot_color(overridden)),
-            ))
-            .id();
-
-        commands.entity(dot).observe(
-            move |click: On<Pointer<Click>>,
-                  dots: Query<&PrefabFieldOverrideDot>,
-                  mut commands: Commands| {
-                if click.event().button != PointerButton::Primary {
-                    return;
-                }
-                let Ok(dot_data) = dots.get(click.event_target()) else {
-                    return;
-                };
-                let entity = dot_data.entity;
-                let type_path = dot_data.type_path.clone();
-                let field_path = dot_data.field_path.clone();
-                // `revert_field` is a no-op when the current value
-                // already matches the prefab, so a click on a hollow
-                // dot is harmless. The visual short-circuit still lives
-                // in `refresh_prefab_field_dots` (which paints the
-                // color); the operator is the source of truth for
-                // whether anything actually changes.
-                commands
-                    .operator("prefab.revert_field")
-                    .settings(CallOperatorSettings {
-                        creates_history_entry: true,
-                        ..default()
-                    })
-                    .param("entity", entity)
-                    .param("type_path", type_path)
-                    .param("field_path", field_path)
-                    .call();
-                commands.queue(move |world: &mut World| {
-                    if let Ok(mut ec) = world.get_entity_mut(entity) {
-                        ec.insert(InspectorDirty);
-                    }
-                });
-            },
-        );
-
-        jackdaw_feathers::utils::attach_or_despawn(&mut commands, wrapper, dot);
-        jackdaw_feathers::utils::attach_or_despawn(&mut commands, row_entity, wrapper);
-    }
-}
-
-/// Repaint every existing override dot whenever the scene AST changes.
-/// Runs only on `ast.is_changed()` ticks so the per-frame cost is one
-/// resource-changed check when nothing is editing.
-pub(crate) fn refresh_prefab_field_dots(
-    ast: Res<SceneJsnAst>,
-    prefab_cache: Res<PrefabAstCache>,
-    mut dots: Query<(&PrefabFieldOverrideDot, &mut BackgroundColor)>,
-) {
-    if !ast.is_changed() && !prefab_cache.is_changed() {
-        return;
-    }
-    for (dot, mut bg) in &mut dots {
-        let overridden = crate::prefab::overrides::field_is_overridden(
-            &ast,
-            &prefab_cache,
-            dot.entity_key,
-            &dot.type_path,
-            Some(&dot.field_path),
-        );
-        bg.0 = override_dot_color(overridden);
-    }
-}
-
-/// Marker on the live-edit dot rendered next to an inspector field row
-/// whose value has been streamed to the running game and is tracked in
-/// the [`LiveEditLog`](crate::live_edits::LiveEditLog). Carries the log
-/// key so the click menu can save or revert the tracked entry.
-#[derive(Component, Clone)]
-pub(crate) struct LiveEditDot {
-    pub(crate) key: crate::live_edits::LiveEditKey,
-}
-
-/// Bookkeeping on a field row currently showing a live-edit dot:
-/// the absolutely-positioned wrapper (for teardown) and the dot itself
-/// (for key comparison on refresh).
-#[derive(Component)]
-pub(crate) struct LiveEditDotWrapper {
-    wrapper: Entity,
-    dot: Entity,
-}
-
-pub(crate) const LIVE_EDIT_SAVE_ACTION: &str = "inspector.live_edit.save";
-pub(crate) const LIVE_EDIT_REVERT_ACTION: &str = "inspector.live_edit.revert";
-
-/// Log key captured when a live-edit dot opens its context menu. Only
-/// one inspector context menu can be open at a time, so a single-slot
-/// resource is enough (same shape as `PrefabMenuTarget`).
-#[derive(Resource, Default)]
-pub(crate) struct LiveEditMenuTarget {
-    pub(crate) key: Option<crate::live_edits::LiveEditKey>,
-}
-
-/// Whether a tracked entry's field path belongs to a field row. Rows
-/// for composite fields (`translation`) own the per-axis entries the
-/// live dispatch records (`translation.x`).
-fn live_entry_matches_row(entry_path: &str, row_path: &str) -> bool {
-    entry_path == row_path
-        || (entry_path.len() > row_path.len()
-            && entry_path.starts_with(row_path)
-            && entry_path.as_bytes()[row_path.len()] == b'.')
-}
-
-/// Keep every inspector field row's live-edit dot in sync with the
-/// [`LiveEditLog`](crate::live_edits::LiveEditLog): a dot appears on
-/// the first tracked edit of a field, follows the entry when it is
-/// saved / reverted / discarded, and vanishes when the log clears.
-/// Runs only when the log or projection changed (or rows respawned),
-/// and spawns / despawns nothing when the row already matches.
-pub(crate) fn refresh_live_edit_field_dots(
-    log: Res<crate::live_edits::LiveEditLog>,
-    projection: Res<crate::pie_projection::PieProjection>,
-    rows: Query<(Entity, &InspectorFieldRow, Option<&LiveEditDotWrapper>)>,
-    new_rows: Query<(), Added<InspectorFieldRow>>,
-    dots: Query<&LiveEditDot>,
-    mut commands: Commands,
-) {
-    if !log.is_changed() && !projection.is_changed() && new_rows.is_empty() {
-        return;
-    }
-    for (row_entity, row, marker) in &rows {
-        let bits = crate::live_edits::live_bits_for_preview(&projection, row.source_entity);
-        let found = bits.and_then(|bits| {
-            log.entries.iter().find(|(key, _)| {
-                key.bits == bits
-                    && key.type_path == row.type_path
-                    && live_entry_matches_row(&key.field_path, &row.field_path)
-            })
-        });
-        let Some((key, entry)) = found else {
-            if let Some(marker) = marker {
-                if let Ok(mut ec) = commands.get_entity(marker.wrapper) {
-                    ec.despawn();
-                }
-                commands.entity(row_entity).remove::<LiveEditDotWrapper>();
-            }
-            continue;
-        };
-        if let Some(marker) = marker {
-            if dots.get(marker.dot).is_ok_and(|dot| dot.key == *key) {
-                continue;
-            }
-            if let Ok(mut ec) = commands.get_entity(marker.wrapper) {
-                ec.despawn();
-            }
-        }
-        spawn_live_edit_dot(&mut commands, row_entity, key, entry);
-    }
-}
-
-/// Spawn the live-edit dot on one field row: same absolutely-positioned
-/// wrapper approach as the prefab override dot, anchored one slot to
-/// its left so both can show on the same row. Hovering surfaces the
-/// authored value; a primary click opens the save / revert menu.
-fn spawn_live_edit_dot(
-    commands: &mut Commands,
-    row_entity: Entity,
-    key: &crate::live_edits::LiveEditKey,
-    entry: &crate::live_edits::LiveEditEntry,
-) {
-    let wrapper = commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(2.0),
-            right: Val::Px(34.0),
-            ..default()
-        })
-        .id();
-
-    let baseline = crate::live_edits::truncate_json_for_display(entry.baseline.as_ref());
-    let dot = commands
-        .spawn((
-            LiveEditDot { key: key.clone() },
-            Node {
-                width: Val::Px(8.0),
-                height: Val::Px(8.0),
-                border_radius: BorderRadius::all(Val::Px(4.0)),
-                ..default()
-            },
-            BackgroundColor(default_style::LIVE_EDIT_ACCENT),
-            Hovered::default(),
-            jackdaw_feathers::tooltip::Tooltip::title(format!("scene: {baseline}")),
-        ))
-        .id();
-
-    commands.entity(dot).observe(
-        |click: On<Pointer<Click>>,
-         dots: Query<&LiveEditDot>,
-         mut commands: Commands,
-         windows: Query<&Window>,
-         mut state: ResMut<jackdaw_widgets::context_menu::ContextMenuState>,
-         mut target: ResMut<LiveEditMenuTarget>| {
-            if click.event().button != PointerButton::Primary {
-                return;
-            }
-            let Ok(dot_data) = dots.get(click.event_target()) else {
-                return;
-            };
-            let cursor_pos = windows
-                .single()
-                .ok()
-                .and_then(bevy::prelude::Window::cursor_position)
-                .unwrap_or_default();
-            if let Some(existing) = state.menu_entity.take()
-                && let Ok(mut ec) = commands.get_entity(existing)
-            {
-                ec.despawn();
-            }
-            target.key = Some(dot_data.key.clone());
-            let items: [(&str, &str); 2] = [
-                (LIVE_EDIT_SAVE_ACTION, "Save to Scene"),
-                (LIVE_EDIT_REVERT_ACTION, "Revert"),
-            ];
-            let menu = jackdaw_feathers::context_menu::spawn_context_menu(
-                &mut commands,
-                cursor_pos,
-                None,
-                &items,
-            );
-            state.menu_entity = Some(menu);
-        },
-    );
-
-    jackdaw_feathers::utils::attach_or_despawn(commands, wrapper, dot);
-    jackdaw_feathers::utils::attach_or_despawn(commands, row_entity, wrapper);
-    commands
-        .entity(row_entity)
-        .insert(LiveEditDotWrapper { wrapper, dot });
-}
-
-/// Observer: dispatch the live-edit save / revert operators when the
-/// dot's context menu fires. The struct key travels through
-/// `LiveEditLog.pending_action`, the same channel the Live Changes
-/// tray uses, so the operators stay parameter-free.
-pub(crate) fn on_live_edit_menu_action(
-    event: On<jackdaw_widgets::context_menu::ContextMenuAction>,
-    mut commands: Commands,
-    mut state: ResMut<jackdaw_widgets::context_menu::ContextMenuState>,
-    mut target: ResMut<LiveEditMenuTarget>,
-    mut log: ResMut<crate::live_edits::LiveEditLog>,
-) {
-    let action = match event.action.as_str() {
-        LIVE_EDIT_SAVE_ACTION => crate::live_edits::LiveEditAction::Save,
-        LIVE_EDIT_REVERT_ACTION => crate::live_edits::LiveEditAction::Revert,
-        _ => return,
-    };
-    let Some(key) = target.key.take() else {
-        return;
-    };
-    log.pending_action = Some((action, key));
-    let operator_id = match action {
-        crate::live_edits::LiveEditAction::Save => crate::live_edits::PieLiveEditSaveOp::ID,
-        crate::live_edits::LiveEditAction::Revert => crate::live_edits::PieLiveEditRevertOp::ID,
-    };
-    commands
-        .operator(operator_id)
-        .settings(CallOperatorSettings {
-            execution_context: ExecutionContext::Invoke,
-            creates_history_entry: false,
-        })
-        .call();
-
-    // Close the menu after dispatching.
-    if let Some(menu) = state.menu_entity.take()
-        && let Ok(mut ec) = commands.get_entity(menu)
-    {
-        ec.despawn();
-    }
-    state.target_entity = None;
 }

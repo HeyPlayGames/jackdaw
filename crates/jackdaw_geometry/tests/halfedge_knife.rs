@@ -12,7 +12,7 @@
 //! step; the operator code lives in `src/brush/topology_ops/knife.rs`
 //! in the editor crate.
 
-use bevy::math::Vec3;
+use glam::Vec3;
 use jackdaw_geometry::halfedge::{
     EdgeKey, FaceKey, HalfedgeMesh, VertKey,
     ops::{edge_split::split_edge, face_poke::face_poke, face_split::split_face},
@@ -208,7 +208,7 @@ fn knife_face_interior_poke_then_chord_to_edge_midpoint() {
 
     // The fan triangle that originally connected (center, v4, v5) was
     // also re-keyed by `split_edge` (which splits each loop in the
-    // radial cycle). We now have two adjacent triangles sharing the
+    // radial cycle), leaving two adjacent triangles that share the
     // new edge_mid vert. Bisect the half-fan that still contains v4.
     let chord_face =
         face_containing_verts(&mesh, center_vert, edge_mid).expect("fan half with edge_mid");

@@ -32,6 +32,14 @@ impl Default for SystemClipboard {
     }
 }
 
+impl SystemClipboard {
+    /// The OS clipboard image as owned RGBA8, or an error when the clipboard
+    /// holds no image. Mirrors how the paste path reaches the inner clipboard.
+    pub(crate) fn get_image(&mut self) -> Result<arboard::ImageData<'static>, arboard::Error> {
+        self.clipboard.get_image()
+    }
+}
+
 // Re-export from jackdaw_jsn
 pub use jackdaw_jsn::GltfSource;
 
@@ -979,6 +987,10 @@ fn remap_stable_ids(
 
 /// Paste entities from system clipboard JSN text.
 fn paste_components(world: &mut World) {
+    if crate::asset_ingest::paste_clipboard_image(world) {
+        return;
+    }
+
     let jsn_text = {
         let Some(mut cb) = world.get_resource_mut::<SystemClipboard>() else {
             return;
@@ -1257,8 +1269,8 @@ fn get_assets_base_dir() -> Option<std::path::PathBuf> {
 // operator has the scene locked, matching the guards the legacy
 // `handle_entity_keys` applied.
 
-use bevy_enhanced_input::prelude::{Press, *};
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
 
 use crate::core_extension::CoreExtensionInputContext;
 
@@ -1279,6 +1291,7 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
     #[cfg(feature = "camera_rig")]
     ctx.register_operator::<EntityAddCameraRigOp>();
     ctx.register_operator::<EntityAddEmptyOp>()
+        .register_operator::<EntityAddImageOp>()
         .register_operator::<EntityAddNavmeshOp>()
         .register_operator::<EntityAddTerrainOp>()
         .register_operator::<EntityAddPrefabOp>()
@@ -1297,56 +1310,28 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
         .register_operator::<EntityAddZoneTransitionOp>()
         .register_operator::<EntityAddNetworkRoomOp>();
 
-    let ext = ctx.id();
-    ctx.entity_mut().world_scope(|world| {
-        world.spawn((
-            Action::<EntityDeleteOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::Delete, Press::default())],
-        ));
-        world.spawn((
-            Action::<EntityDuplicateOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(
-                KeyCode::KeyD.with_mod_keys(ModKeys::CONTROL),
-                Press::default(),
-            )],
-        ));
-        world.spawn((
-            Action::<EntityCopyComponentsOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(
-                KeyCode::KeyC.with_mod_keys(ModKeys::CONTROL),
-                Press::default(),
-            )],
-        ));
-        world.spawn((
-            Action::<EntityPasteComponentsOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(
-                KeyCode::KeyV.with_mod_keys(ModKeys::CONTROL),
-                Press::default(),
-            )],
-        ));
-        world.spawn((
-            Action::<EntityToggleVisibilityOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::KeyH, Press::default())],
-        ));
-        world.spawn((
-            Action::<EntityUnhideAllOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(
-                KeyCode::KeyH.with_mod_keys(ModKeys::CONTROL),
-                Press::default(),
-            )],
-        ));
-        world.spawn((
-            Action::<EntityHideUnselectedOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            bindings![(KeyCode::KeyH.with_mod_keys(ModKeys::ALT), Press::default(),)],
-        ));
-    });
+    ctx.bind_operator::<CoreExtensionInputContext, EntityDeleteOp>([PresetInput::key("Delete")]);
+    ctx.bind_operator::<CoreExtensionInputContext, EntityDuplicateOp>([
+        PresetInput::key("KeyD").ctrl()
+    ]);
+    ctx.bind_operator::<CoreExtensionInputContext, EntityCopyComponentsOp>([PresetInput::key(
+        "KeyC",
+    )
+    .ctrl()]);
+    ctx.bind_operator::<CoreExtensionInputContext, EntityPasteComponentsOp>([PresetInput::key(
+        "KeyV",
+    )
+    .ctrl()]);
+    ctx.bind_operator::<CoreExtensionInputContext, EntityToggleVisibilityOp>([PresetInput::key(
+        "KeyH",
+    )]);
+    ctx.bind_operator::<CoreExtensionInputContext, EntityUnhideAllOp>([
+        PresetInput::key("KeyH").ctrl()
+    ]);
+    ctx.bind_operator::<CoreExtensionInputContext, EntityHideUnselectedOp>([PresetInput::key(
+        "KeyH",
+    )
+    .alt()]);
 }
 
 /// Shared availability check for entity manipulation operators.
@@ -1546,6 +1531,12 @@ pub(crate) fn entity_add_camera_rig(
     commands.queue(|world: &mut World| {
         create_entity_in_world(world, EntityTemplate::CameraRig);
     });
+    OperatorResult::Finished
+}
+
+#[operator(id = "entity.add.image", label = "Image")]
+pub fn entity_add_image(_: In<OperatorParameters>, mut commands: Commands) -> OperatorResult {
+    commands.queue(crate::reference_image::open_reference_image_picker);
     OperatorResult::Finished
 }
 

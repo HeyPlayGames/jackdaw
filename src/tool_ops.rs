@@ -5,8 +5,9 @@
 //! fire while the user is flying the camera.
 
 use bevy::prelude::*;
-use bevy_enhanced_input::prelude::{Press, *};
+use bevy_enhanced_input::prelude::*;
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
 
 use crate::active_tool::ActiveTool;
 use crate::core_extension::CoreExtensionInputContext;
@@ -18,6 +19,16 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
         .register_operator::<ToolRotateOp>()
         .register_operator::<ToolScaleOp>();
 
+    // Defaults recorded into the keymap; bindings themselves come from the preset applier.
+    ctx.bind_operator::<CoreExtensionInputContext, ToolSelectOp>([PresetInput::key("KeyQ")]);
+    ctx.bind_operator::<CoreExtensionInputContext, ToolTranslateOp>([PresetInput::key("KeyW")]);
+    ctx.bind_operator::<CoreExtensionInputContext, ToolRotateOp>([PresetInput::key("KeyE")]);
+    ctx.bind_operator::<CoreExtensionInputContext, ToolScaleOp>([PresetInput::key("KeyR")]);
+
+    // Spawn the RMB-held guard action (mouse binding: left unchanged) and attach
+    // BlockBy to every tool action entity so the tool keys stay silent while the
+    // camera fly is active. Must run after bind_operator so the Action<Tool*>
+    // entities already exist.
     let ext = ctx.id();
     ctx.entity_mut().world_scope(|world| {
         let rmb_guard = world
@@ -28,30 +39,23 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
             ))
             .id();
 
-        world.spawn((
-            Action::<ToolSelectOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            BlockBy::single(rmb_guard),
-            bindings![(KeyCode::KeyQ, Press::default())],
-        ));
-        world.spawn((
-            Action::<ToolTranslateOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            BlockBy::single(rmb_guard),
-            bindings![(KeyCode::KeyW, Press::default())],
-        ));
-        world.spawn((
-            Action::<ToolRotateOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            BlockBy::single(rmb_guard),
-            bindings![(KeyCode::KeyE, Press::default())],
-        ));
-        world.spawn((
-            Action::<ToolScaleOp>::new(),
-            ActionOf::<CoreExtensionInputContext>::new(ext),
-            BlockBy::single(rmb_guard),
-            bindings![(KeyCode::KeyR, Press::default())],
-        ));
+        let block = BlockBy::single(rmb_guard);
+        let mut q = world.query_filtered::<Entity, With<Action<ToolSelectOp>>>();
+        for e in q.iter(world).collect::<Vec<_>>() {
+            world.entity_mut(e).insert(block.clone());
+        }
+        let mut q = world.query_filtered::<Entity, With<Action<ToolTranslateOp>>>();
+        for e in q.iter(world).collect::<Vec<_>>() {
+            world.entity_mut(e).insert(block.clone());
+        }
+        let mut q = world.query_filtered::<Entity, With<Action<ToolRotateOp>>>();
+        for e in q.iter(world).collect::<Vec<_>>() {
+            world.entity_mut(e).insert(block.clone());
+        }
+        let mut q = world.query_filtered::<Entity, With<Action<ToolScaleOp>>>();
+        for e in q.iter(world).collect::<Vec<_>>() {
+            world.entity_mut(e).insert(block.clone());
+        }
     });
 }
 
@@ -60,6 +64,20 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
 /// install an `ActiveModalOperator` for their duration.
 fn can_change_tool(keybind_focus: KeybindFocus, active: ActiveModalQuery) -> bool {
     !keybind_focus.is_typing() && !active.is_modal_running()
+}
+
+/// The Rotate tool shares `KeyE` with brush face Extrude. To keep both from
+/// firing on the same press, the Rotate tool is unavailable in Face edit mode
+/// (Extrude's home), so E means Extrude there; it stays available (keybind and
+/// palette) in object / vertex / edge modes. Until the planned keymap-preset
+/// switch lands, this is the context-aware split.
+fn can_rotate_tool(
+    keybind_focus: KeybindFocus,
+    active: ActiveModalQuery,
+    edit_mode: Res<crate::brush::EditMode>,
+) -> bool {
+    can_change_tool(keybind_focus, active)
+        && *edit_mode != crate::brush::EditMode::BrushEdit(crate::brush::BrushEditMode::Face)
 }
 
 pub(crate) fn tool_select_impl(world: &mut World) {
@@ -95,7 +113,7 @@ pub fn tool_translate(_: In<OperatorParameters>, world: &mut World) -> OperatorR
     OperatorResult::Finished
 }
 
-#[operator(id = "tool.rotate", label = "Rotate Tool", is_available = can_change_tool)]
+#[operator(id = "tool.rotate", label = "Rotate Tool", is_available = can_rotate_tool)]
 pub fn tool_rotate(_: In<OperatorParameters>, world: &mut World) -> OperatorResult {
     tool_rotate_impl(world);
     OperatorResult::Finished

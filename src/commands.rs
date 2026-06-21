@@ -582,7 +582,7 @@ pub(crate) fn collect_entity_ids(world: &World, entity: Entity, out: &mut Vec<En
                 continue;
             }
             // Skip editor-only entities and runtime-generated children
-            // (e.g. BrushFaceEntity meshes). Including NonSerializable
+            // (e.g. BrushMeshChunk meshes). Including NonSerializable
             // children causes them to be restored as orphans at origin
             // after undo, while the parent regenerates its own.
             if world.get::<EditorEntity>(child).is_some()

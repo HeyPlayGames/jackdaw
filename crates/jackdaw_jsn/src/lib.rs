@@ -1,4 +1,5 @@
 pub mod ast;
+mod brush_chunks;
 pub mod editor_meta;
 pub mod format;
 mod loader;
@@ -19,6 +20,7 @@ pub use types::{
 pub use jackdaw_geometry;
 
 pub use ast::{JsnNodeId, SceneJsnAst, needs_id_migration};
+pub use brush_chunks::{MeshChunk, build_brush_chunks};
 pub use format::{JsnProject, JsnProjectConfig, JsnScene};
 pub use loader::JsnAssetLoader;
 
@@ -40,7 +42,8 @@ impl Default for JsnPlugin {
 impl Plugin for JsnPlugin {
     fn build(&self, app: &mut App) {
         use jackdaw_geometry::{
-            AttributeData, AttributeStack, MeshEdge, MeshLoop, MeshPoly, MeshVert,
+            AttributeData, AttributeStack, MeshEdge, MeshLoop, MeshMirror, MeshPoly, MeshVert,
+            Modifier, ModifierEntry, ModifierStack,
         };
         app.register_type::<Brush>()
             .register_type::<BrushGroup>()
@@ -61,6 +64,10 @@ impl Plugin for JsnPlugin {
             .register_type::<JsnPrefab>()
             .register_type::<NavmeshRegion>()
             .register_type::<Terrain>()
+            .register_type::<MeshMirror>()
+            .register_type::<ModifierStack>()
+            .register_type::<ModifierEntry>()
+            .register_type::<Modifier>()
             .init_asset_loader::<JsnAssetLoader>();
 
         #[cfg(feature = "render")]

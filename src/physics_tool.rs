@@ -15,8 +15,8 @@ use bevy::{
     window::SystemCursorIcon,
 };
 
-use bevy_enhanced_input::prelude::{Press, *};
 use jackdaw_api::prelude::*;
+use jackdaw_api_internal::keymap::PresetInput;
 
 use crate::brush::{BrushSelection, EditMode};
 use crate::commands::{CommandGroup, CommandHistory, EditorCommand, SetJsnField};
@@ -49,20 +49,10 @@ pub(crate) fn add_to_extension(ctx: &mut ExtensionContext) {
     ctx.register_operator::<PhysicsActivateOp>()
         .register_operator::<PhysicsCommitOp>();
 
-    let ext = ctx.id();
-    ctx.spawn((
-        Action::<PhysicsActivateOp>::new(),
-        ActionOf::<CoreExtensionInputContext>::new(ext),
-        bindings![(
-            KeyCode::KeyP.with_mod_keys(ModKeys::SHIFT),
-            Press::default(),
-        )],
-    ));
-    ctx.spawn((
-        Action::<PhysicsCommitOp>::new(),
-        ActionOf::<CoreExtensionInputContext>::new(ext),
-        bindings![(KeyCode::Space, Press::default())],
-    ));
+    ctx.bind_operator::<CoreExtensionInputContext, PhysicsActivateOp>([
+        PresetInput::key("KeyP").shift()
+    ]);
+    ctx.bind_operator::<CoreExtensionInputContext, PhysicsCommitOp>([PresetInput::key("Space")]);
 }
 
 /// Enter the Physics Tool placement mode.
@@ -424,23 +414,24 @@ fn physics_tool_drag(
     if let Some(ref drag) = tool_state.drag {
         if mouse.pressed(MouseButton::Left) {
             // Project cursor ray onto the drag plane
-            let denom = ray.direction.dot(drag.plane_normal);
-            if denom.abs() > 1e-6 {
-                let t = (drag.plane_origin - ray.origin).dot(drag.plane_normal) / denom;
-                if t > 0.0 {
-                    let target = ray.origin + ray.direction * t + drag.grab_offset;
-                    // Compute movement delta from the primary dragged entity
-                    let delta = target - drag.drag_start_pos;
+            if let Some(hit) = jackdaw_geometry::ray_plane_intersection(
+                ray.origin,
+                *ray.direction,
+                drag.plane_origin,
+                drag.plane_normal,
+            ) {
+                let target = hit + drag.grab_offset;
+                // Compute movement delta from the primary dragged entity
+                let delta = target - drag.drag_start_pos;
 
-                    // Apply delta to ALL selected entities in the group
-                    for (&entity, &start_pos) in &drag.start_positions {
-                        if let Ok(mut tf) = transforms.get_mut(entity) {
-                            tf.translation = start_pos + delta;
-                        }
-                        if let Ok((mut lv, mut av)) = velocities.get_mut(entity) {
-                            lv.0 = Vec3::ZERO;
-                            av.0 = Vec3::ZERO;
-                        }
+                // Apply delta to ALL selected entities in the group
+                for (&entity, &start_pos) in &drag.start_positions {
+                    if let Ok(mut tf) = transforms.get_mut(entity) {
+                        tf.translation = start_pos + delta;
+                    }
+                    if let Ok((mut lv, mut av)) = velocities.get_mut(entity) {
+                        lv.0 = Vec3::ZERO;
+                        av.0 = Vec3::ZERO;
                     }
                 }
             }

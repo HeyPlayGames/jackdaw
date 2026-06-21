@@ -10,6 +10,7 @@ pub mod alignment_guides;
 pub mod app_ops;
 pub mod asset_browser;
 pub mod asset_catalog;
+pub mod asset_ingest;
 pub mod brush;
 pub mod brush_drag_ops;
 pub mod brush_element_ops;
@@ -31,6 +32,7 @@ pub mod gizmos;
 pub mod grid_ops;
 pub mod hierarchy;
 pub mod history_ops;
+pub mod input_contexts;
 pub mod inspector;
 pub mod keybind_focus;
 pub mod keybind_settings;
@@ -60,7 +62,10 @@ pub mod live_input;
 pub mod material_browser;
 pub mod material_preview;
 pub mod measure_tool;
+pub mod mesh_quick_menu;
+pub mod modal_inputs;
 pub mod modal_transform;
+pub mod modifier_ops;
 pub mod navmesh;
 pub mod new_project;
 pub mod numeric_transform;
@@ -75,6 +80,7 @@ pub mod prefab;
 pub mod project;
 pub mod project_files;
 pub mod project_select;
+pub mod reference_image;
 pub mod reflect_default;
 pub mod remote;
 pub mod restart;
@@ -327,9 +333,14 @@ impl Plugin for EditorCorePlugin {
             measure_tool::MeasureToolPlugin,
             draw_brush::DrawBrushPlugin,
             face_grid::FaceGridPlugin,
+            brush::mirror_plane_overlay::MirrorPlaneOverlayPlugin,
+            asset_ingest::AssetIngestPlugin,
             alignment_guides::AlignmentGuidesPlugin,
             navmesh::NavmeshPlugin,
             terrain::TerrainPlugin,
+            reference_image::ReferenceImagePlugin,
+            jackdaw_widgets::RadialMenuPlugin,
+            mesh_quick_menu::MeshQuickMenuPlugin,
             remote::RemoteConnectionPlugin,
         ))
         .add_plugins(jackdaw_avian_integration::PhysicsOverlaysPlugin::<
@@ -343,6 +354,7 @@ impl Plugin for EditorCorePlugin {
         .add_plugins(jackdaw_animation::AnimationPlugin)
         .add_plugins(windowing::WindowingPlugin)
         .add_plugins(jackdaw_panels::DockPlugin)
+        .add_plugins(input_contexts::InputContextsPlugin)
         .add_plugins(jackdaw_api_internal::ExtensionLoaderPlugin)
         .add_plugins(extension_watcher::ExtensionWatcherPlugin)
         .add_plugins(extensions_dialog::ExtensionsDialogPlugin)
@@ -386,6 +398,7 @@ impl Plugin for EditorCorePlugin {
                 .run_if(in_state(crate::AppState::Editor)),
         )
         .insert_resource(UiTheme(create_dark_theme()))
+        .insert_resource(jackdaw_api_internal::load_active_keymap_preset())
         .init_resource::<layout::ActiveDocument>()
         .init_resource::<layout::SceneViewPreset>()
         .init_resource::<asset_catalog::AssetCatalog>()
@@ -420,6 +433,7 @@ impl Plugin for EditorCorePlugin {
             (
                 send_scroll_events,
                 layout::update_toolbar_button_variants,
+                layout::update_grid_size_label,
                 layout::update_active_document_display,
                 layout::update_tab_strip_highlights,
                 layout::update_pie_view_toggle_appearance,
@@ -587,7 +601,7 @@ fn auto_hide_internal_entities(
             Added<Transform>,
             Without<EditorEntity>,
             Without<EditorHidden>,
-            Without<brush::BrushFaceEntity>,
+            Without<brush::BrushMeshChunk>,
         ),
     >,
     parent_query: Query<&ChildOf>,
@@ -2190,6 +2204,7 @@ fn populate_menu(
             TopLevelMenu::View,
             vec![
                 op_entry::<view_ops::ViewToggleWireframeOp>("Toggle Wireframe"),
+                op_entry::<view_ops::ViewToggleXrayOp>("Toggle X-Ray"),
                 op_entry::<view_ops::ViewToggleBoundingBoxesOp>("Toggle Bounding Boxes"),
                 op_entry::<view_ops::ViewCycleBoundingBoxModeOp>("Cycle Bounding Box Mode"),
                 op_entry::<view_ops::ViewToggleFaceGridOp>("Toggle Face Grid"),
