@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/jbuehler23/jackdaw"
 
 [dependencies]
-glam = { version = "0.30", features = ["serde"] }
+glam.workspace = true
 # Path dep with no default features so the bevy-gated `render` feature of
 # jackdaw_geometry is never pulled in; this keeps jackdaw_pick bevy-free.
 jackdaw_geometry = { version = "0.5.0", path = "../jackdaw_geometry", default-features = false }

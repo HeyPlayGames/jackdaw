@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/jbuehler23/jackdaw"
 
 [dependencies]
-glam = { version = "0.30", features = ["serde"] }
+glam.workspace = true
 jackdaw_geometry = { path = "../jackdaw_geometry", default-features = false }
 # manifold-csg pulls in manifold3d (C++ via cmake). Build prereqs:
 # cmake, a C++ compiler, git. See the crate README for details.

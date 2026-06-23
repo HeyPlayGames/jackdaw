@@ -22,7 +22,7 @@ repository = "https://github.com/jbuehler23/jackdaw"
 dynamic_linking = [
     "dep:jackdaw_dylib",
     "bevy/dynamic_linking",
-    "bevy/experimental_bevy_feathers",
+    "bevy/bevy_feathers",
     "bevy/serialize",
     "bevy/debug",
     "bevy/bevy_remote",
