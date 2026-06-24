@@ -17,11 +17,12 @@
 
 use std::any::TypeId;
 
+use bevy::reflect::enums::{DynamicEnum, DynamicVariant, VariantInfo};
 use bevy::reflect::std_traits::ReflectDefault;
-use bevy::reflect::{
-    DynamicEnum, DynamicStruct, DynamicTuple, DynamicTupleStruct, DynamicVariant, PartialReflect,
-    Reflect, TypeInfo, TypeRegistry, VariantInfo,
-};
+use bevy::reflect::structs::DynamicStruct;
+use bevy::reflect::tuple::DynamicTuple;
+use bevy::reflect::tuple_struct::DynamicTupleStruct;
+use bevy::reflect::{PartialReflect, Reflect, TypeInfo, TypeRegistry};
 
 /// Default-instance for `type_id`. Uses `ReflectDefault` when
 /// present; otherwise walks the type's fields recursively.

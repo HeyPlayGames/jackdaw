@@ -109,7 +109,7 @@ pub(super) fn spawn_material_color_field(
     world.spawn((
         Text::new(format!("{label}:")),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -128,8 +128,8 @@ pub(super) fn spawn_material_color_field(
     world.entity_mut(picker).observe(
         move |event: On<ColorPickerCommitEvent>,
               mut materials: ResMut<Assets<StandardMaterial>>| {
-            if let Some(material) = materials.get_mut(&picker_handle) {
-                write(material, event.color);
+            if let Some(mut material) = materials.get_mut(&picker_handle) {
+                write(&mut material, event.color);
             }
         },
     );
@@ -151,8 +151,8 @@ pub(super) fn on_material_checkbox_commit(
     let Ok(binding) = bindings.get(event.entity) else {
         return;
     };
-    if let Some(material) = materials.get_mut(&binding.material_handle) {
-        (binding.apply_fn)(material, event.checked);
+    if let Some(mut material) = materials.get_mut(&binding.material_handle) {
+        (binding.apply_fn)(&mut material, event.checked);
     }
 }
 
@@ -183,7 +183,7 @@ pub(super) fn spawn_material_checkbox_field(
     world.spawn((
         Text::new(format!("{label}:")),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -230,7 +230,7 @@ pub(super) fn spawn_material_combobox_field(
     world.spawn((
         Text::new(format!("{label}:")),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -304,7 +304,7 @@ pub(super) fn spawn_material_texture_slot(
     world.spawn((
         Text::new(format!("{label}:")),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -332,7 +332,7 @@ pub(super) fn spawn_material_texture_slot(
         world.spawn((
             Text::new("none"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -350,7 +350,7 @@ pub(super) fn spawn_material_texture_slot(
         .spawn((
             icon_colored(
                 Icon::FolderOpen,
-                tokens::FONT_SM,
+                tokens::TEXT_SIZE_SM_PX,
                 icon_font.clone(),
                 tokens::TEXT_SECONDARY,
             ),
@@ -381,7 +381,7 @@ pub(super) fn spawn_material_texture_slot(
             .spawn((
                 icon_colored(
                     Icon::X,
-                    tokens::FONT_SM,
+                    tokens::TEXT_SIZE_SM_PX,
                     icon_font.clone(),
                     tokens::TEXT_SECONDARY,
                 ),
@@ -486,8 +486,8 @@ pub(super) fn on_material_text_commit(
         };
         if let Ok(binding) = bindings.get(child_of.parent()) {
             let value: f64 = event.text.parse().unwrap_or(0.0);
-            if let Some(material) = materials.get_mut(&binding.material_handle) {
-                (binding.apply_fn)(material, value);
+            if let Some(mut material) = materials.get_mut(&binding.material_handle) {
+                (binding.apply_fn)(&mut material, value);
             }
             return;
         }
@@ -579,7 +579,7 @@ pub(super) fn fill_settings_card(
         cull_idx,
         handle.clone(),
         |world, h, i| {
-            if let Some(m) = world.resource_mut::<Assets<StandardMaterial>>().get_mut(h) {
+            if let Some(mut m) = world.resource_mut::<Assets<StandardMaterial>>().get_mut(h) {
                 m.cull_mode = match i {
                     1 => Some(Face::Front),
                     2 => Some(Face::Back),
@@ -638,7 +638,7 @@ pub(super) fn fill_settings_card(
         alpha_idx,
         handle.clone(),
         |world, h, i| {
-            if let Some(m) = world.resource_mut::<Assets<StandardMaterial>>().get_mut(h) {
+            if let Some(mut m) = world.resource_mut::<Assets<StandardMaterial>>().get_mut(h) {
                 m.alpha_mode = match i {
                     1 => AlphaMode::Mask(0.5),
                     2 => AlphaMode::Blend,
@@ -706,7 +706,7 @@ pub(crate) fn fill_material_card_body(
             world.spawn((
                 Text::new("No material assigned"),
                 TextFont {
-                    font_size: jackdaw_feathers::tokens::FONT_SM,
+                    font_size: jackdaw_feathers::tokens::TEXT_SIZE_SM,
                     ..default()
                 },
                 TextColor(jackdaw_feathers::tokens::TEXT_SECONDARY),
@@ -1104,7 +1104,7 @@ fn spawn_material_numeric_field(
     world.spawn((
         Text::new(format!("{label}:")),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),

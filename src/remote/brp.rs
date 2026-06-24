@@ -11,7 +11,6 @@ pub fn brp_request(
     params: Option<serde_json::Value>,
 ) -> bevy::tasks::Task<Result<serde_json::Value, anyhow::Error>> {
     let req = BrpRequest {
-        jsonrpc: String::from("2.0"),
         method: String::from(method),
         id: None,
         params,

@@ -511,7 +511,8 @@ impl SceneJsnAst {
 // named fields to array indices when the JSON value is an array (e.g., Vec3
 // serializes as [x, y, z] but reflection paths use `translation.x`).
 
-use bevy::reflect::{EnumInfo, TypeInfo, TypeRegistration, VariantInfo};
+use bevy::reflect::enums::{EnumInfo, VariantInfo};
+use bevy::reflect::{TypeInfo, TypeRegistration};
 
 /// Read a nested field by dotted path from a standalone component JSON value,
 /// resolving named fields to array indices via the type registry. Uses the

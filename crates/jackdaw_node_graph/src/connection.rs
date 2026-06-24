@@ -142,7 +142,7 @@ pub fn update_connection_endpoints(
         let p1 = source_local + Vec2::new(dx * 0.5, 0.0);
         let p2 = target_local - Vec2::new(dx * 0.5, 0.0);
 
-        let Some(material) = materials.get_mut(&material_handle.0) else {
+        let Some(mut material) = materials.get_mut(&material_handle.0) else {
             continue;
         };
         material.p0 = source_local;
@@ -290,7 +290,7 @@ pub fn update_ghost_wire(
 
     if let Some((_entity, material_handle)) = ghost_query.iter().next() {
         // Ghost already exists; just update its material.
-        if let Some(material) = materials.get_mut(&material_handle.0) {
+        if let Some(mut material) = materials.get_mut(&material_handle.0) {
             material.p0 = source_local;
             material.p1 = p1;
             material.p2 = p2;

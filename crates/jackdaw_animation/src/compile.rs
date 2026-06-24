@@ -156,7 +156,7 @@ pub fn compile_clips(
         // in place so the target entity's `AnimationGraphHandle` stays
         // valid. Otherwise spin up fresh assets.
         if let Ok(existing) = existing_compiled.get(clip_entity)
-            && let Some(clip_data) = clip_store.get_mut(&existing.clip)
+            && let Some(mut clip_data) = clip_store.get_mut(&existing.clip)
         {
             *clip_data = new_clip_data;
             continue;

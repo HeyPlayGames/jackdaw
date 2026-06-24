@@ -528,7 +528,7 @@ impl<'a> OperatorCallBuilder<'a, World> {
             let Some(op) = world.get::<OperatorEntity>(op_entity).cloned() else {
                 return Err(CallOperatorError::UnknownId(id));
             };
-            if op.modal && active.get(world).is_modal_running() {
+            if op.modal && active.get(world).ok().is_some_and(|a| a.is_modal_running()) {
                 return Err(CallOperatorError::ModalAlreadyActive(op.id));
             }
             let Some(check) = op.availability_check else {
@@ -590,7 +590,7 @@ fn is_op_running(
     world: &mut World,
     active: &mut SystemState<ActiveModalQuery>,
 ) -> bool {
-    active.get(world).is_operator(id)
+    active.get(world).ok().is_some_and(|a| a.is_operator(id))
 }
 
 fn dispatch_operator(
@@ -611,7 +611,10 @@ fn dispatch_operator(
     };
 
     if op.modal
-        && let Some(active_op) = active.get(world).get_operator()
+        && let Some(active_op) = active
+            .get(world)
+            .ok()
+            .and_then(|a| a.get_operator().cloned())
     {
         return Err(CallOperatorError::ModalAlreadyActive(active_op.id));
     }
@@ -724,7 +727,11 @@ impl EditorCommand for SnapshotDiff {
 /// active modal operator's invoke system each frame; exits modal on
 /// `Finished` (committing) or `Cancelled` (discarding).
 pub(crate) fn tick_modal_operator(world: &mut World, active: &mut SystemState<ActiveModalQuery>) {
-    let Some(op) = active.get(world).get_operator().cloned() else {
+    let Some(op) = active
+        .get(world)
+        .ok()
+        .and_then(|a| a.get_operator().cloned())
+    else {
         return;
     };
     let result = match world.run_system_with(op.invoke, default()) {
@@ -760,7 +767,11 @@ pub(crate) fn cancel_active_modal(
     world: &mut World,
     active: &mut SystemState<ActiveModalQuery>,
 ) -> Result {
-    let Some(op) = active.get(world).get_operator().cloned() else {
+    let Some(op) = active
+        .get(world)
+        .ok()
+        .and_then(|a| a.get_operator().cloned())
+    else {
         return Ok(());
     };
     world
@@ -787,7 +798,7 @@ pub(crate) fn cancel_operator(
         cancel_err = Some(err);
     }
     let mut finalize_err = None;
-    if active.get(world).is_operator(id)
+    if active.get(world).ok().is_some_and(|a| a.is_operator(id))
         && let Err(err) = world.run_system_cached_with(finalize_modal, false)
     {
         error!("Failed to finalize modal operator: {err:?}");
@@ -813,6 +824,8 @@ fn finalize_modal(
 ) {
     let Some((entity, op)) = active
         .get(world)
+        .ok()
+        .flatten()
         .map(Single::into_inner)
         .map(|(e, o)| (e, o.clone()))
     else {

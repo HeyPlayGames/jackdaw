@@ -111,7 +111,7 @@ fn can_change_edit_mode(
     vertex_drag: Res<VertexDragState>,
     edge_drag: Res<EdgeDragState>,
 ) -> bool {
-    if input_focus.0.is_some() || active.is_modal_running() {
+    if input_focus.get().is_some() || active.is_modal_running() {
         return false;
     }
     if face_drag.active || vertex_drag.active || edge_drag.active {

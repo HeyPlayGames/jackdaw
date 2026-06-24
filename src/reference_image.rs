@@ -108,7 +108,9 @@ pub fn spawn_reference_image_in_world(world: &mut World, path: &str, position: V
     let path = path.to_string();
     crate::spawn_undoable(world, "Add Image", move |world| {
         let mut system_state: SystemState<(Commands, ResMut<Selection>)> = SystemState::new(world);
-        let (mut commands, mut selection) = system_state.get_mut(world);
+        let Ok((mut commands, mut selection)) = system_state.get_mut(world) else {
+            return Entity::PLACEHOLDER;
+        };
         let entity = spawn_reference_image(&mut commands, &path, position, &mut selection);
         system_state.apply(world);
         crate::scene_io::register_entity_in_ast(world, entity);
@@ -229,7 +231,7 @@ pub fn maintain_reference_images(
         // material alpha when non-path fields (opacity, locked) changed,
         // without resetting the runtime (aspect_applied and warned persist).
         if reference.is_changed() {
-            if let Some(existing) = material.and_then(|handle| materials.get_mut(&handle.0)) {
+            if let Some(mut existing) = material.and_then(|handle| materials.get_mut(&handle.0)) {
                 let texture = runtime.as_ref().and_then(|r| r.image.clone());
                 *existing = reference_material(&reference, texture);
             }
@@ -275,12 +277,13 @@ fn reload_reference_render(
         Some(asset_server.load::<Image>(asset_path))
     };
     let new_material = reference_material(reference, texture.clone());
-    match material.and_then(|handle| materials.get_mut(&handle.0)) {
-        Some(existing) => *existing = new_material,
-        None => {
-            let handle = materials.add(new_material);
-            commands.entity(entity).insert(MeshMaterial3d(handle));
+    if let Some(mat_handle) = material {
+        if let Some(mut existing) = materials.get_mut(&mat_handle.0) {
+            *existing = new_material;
         }
+    } else {
+        let handle = materials.add(new_material);
+        commands.entity(entity).insert(MeshMaterial3d(handle));
     }
     commands.entity(entity).insert(ReferenceImageRuntime {
         loaded_path: reference.path.clone(),
@@ -328,7 +331,7 @@ fn poll_reference_aspect(
         );
         runtime.warned = true;
         runtime.image = None;
-        if let Some(existing) = material.and_then(|handle| materials.get_mut(&handle.0)) {
+        if let Some(mut existing) = material.and_then(|handle| materials.get_mut(&handle.0)) {
             *existing = reference_material(reference, None);
         }
     }

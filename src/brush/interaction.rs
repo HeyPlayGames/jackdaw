@@ -22,7 +22,7 @@ pub(super) fn drop_brush_edit_on_deselect(
     mut brush_selection: ResMut<BrushSelection>,
     modal: Res<crate::modal_transform::ModalTransformState>,
 ) {
-    if input_focus.0.is_some() || modal.active.is_some() {
+    if input_focus.get().is_some() || modal.active.is_some() {
         return;
     }
 

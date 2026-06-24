@@ -154,7 +154,7 @@ pub(crate) fn sync_resize_overlay_pickability(
     };
     for mut edge_pickable in resize_edges.iter_mut() {
         if *edge_pickable != pickable {
-            *edge_pickable = pickable.clone();
+            *edge_pickable = pickable;
         }
     }
 }

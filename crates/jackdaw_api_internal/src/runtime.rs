@@ -306,7 +306,7 @@ impl<'w> GameApp<'w> {
 
         // 3) Resources: `World::remove_resource_by_id`.
         for id in &book.resources {
-            if let Some(component_id) = self.world.components().get_resource_id(*id) {
+            if let Some(component_id) = self.world.components().get_id(*id) {
                 self.world.remove_resource_by_id(component_id);
             }
         }

@@ -129,7 +129,7 @@ fn can_act_on_entities(
     edit_mode: Res<crate::brush::EditMode>,
     tree: Res<jackdaw_panels::tree::DockTree>,
 ) -> bool {
-    if input_focus.0.is_some() || active.is_modal_running() || modal.active.is_some() {
+    if input_focus.get().is_some() || active.is_modal_running() || modal.active.is_some() {
         return false;
     }
     if draw_state.active.is_some() {

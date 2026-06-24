@@ -82,7 +82,6 @@ pub(crate) fn navmesh_fetch(
         };
         let json = serde_json::to_value(params)?;
         let req = BrpRequest {
-            jsonrpc: String::from("2.0"),
             method: String::from(BRP_GENERATE_EDITOR_INPUT),
             id: None,
             params: Some(json),
@@ -134,7 +133,6 @@ fn poll_remote_navmesh_input(
         let params = PollEditorInputParams { id: response.id };
         let json = serde_json::to_value(params)?;
         let req = BrpRequest {
-            jsonrpc: String::from("2.0"),
             method: String::from(BRP_POLL_EDITOR_INPUT),
             id: None,
             params: Some(json),

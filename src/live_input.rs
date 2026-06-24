@@ -50,7 +50,9 @@ pub(crate) fn engage_capture(world: &mut World, surface: Entity) {
         capture.active = true;
         capture.panel_node = Some(surface);
     }
-    world.resource_mut::<bevy::input_focus::InputFocus>().0 = None;
+    world
+        .resource_mut::<bevy::input_focus::InputFocus>()
+        .clear();
     world
         .resource_mut::<PendingForwards>()
         .0

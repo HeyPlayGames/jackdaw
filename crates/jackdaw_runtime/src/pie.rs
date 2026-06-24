@@ -73,7 +73,7 @@ pub fn attach_pie(app: &mut App, transport: IpcChannelTransport) {
     app.insert_resource(crate::pie_frames::spawn_frame_sender_thread(
         transport.lane_sender(jackdaw_pie_protocol::PieChannel::Frames),
     ));
-    app.insert_non_send_resource(PieTransportRes(transport));
+    app.insert_non_send(PieTransportRes(transport));
     app.init_resource::<PieStreamState>();
     app.init_resource::<HighlightedEntity>();
     // Drain control in PreUpdate, before input processing so forwarded editor
@@ -188,7 +188,7 @@ fn stream_state(world: &mut World) {
             }
         }
 
-        let transport = &mut world.non_send_resource_mut::<PieTransportRes>().0;
+        let transport = &mut world.non_send_mut::<PieTransportRes>().0;
         for bytes in &spawn_frames {
             transport.send(PieChannel::Reliable, bytes);
         }
@@ -253,7 +253,7 @@ fn stream_state(world: &mut World) {
         }
     }
 
-    let transport = &mut world.non_send_resource_mut::<PieTransportRes>().0;
+    let transport = &mut world.non_send_mut::<PieTransportRes>().0;
     for bytes in &spawn_frames {
         transport.send(PieChannel::Reliable, bytes);
     }
@@ -291,7 +291,7 @@ fn apply_control(world: &mut World) {
     }
 
     let frames: Vec<Vec<u8>> = world
-        .non_send_resource_mut::<PieTransportRes>()
+        .non_send_mut::<PieTransportRes>()
         .0
         .drain_received()
         .into_iter()
@@ -341,7 +341,7 @@ fn apply_control(world: &mut World) {
                 let reply = StateEvent::PickResult { entity };
                 if let Ok(bytes) = to_bytes(&reply) {
                     world
-                        .non_send_resource_mut::<PieTransportRes>()
+                        .non_send_mut::<PieTransportRes>()
                         .0
                         .send(PieChannel::Reliable, &bytes);
                 }

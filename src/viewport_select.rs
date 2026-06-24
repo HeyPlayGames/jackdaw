@@ -183,7 +183,7 @@ pub(crate) fn handle_viewport_click(
     let local_cursor = (cursor_pos - map.top_left) * map.remap;
 
     // Clear input focus so keyboard shortcuts (G/R/S) work after viewport click
-    input_focus.0 = None;
+    input_focus.clear();
 
     // Try mesh raycast first for accurate geometry-based selection
     let mut best_entity = None;

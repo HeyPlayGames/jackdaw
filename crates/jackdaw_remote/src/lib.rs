@@ -71,14 +71,14 @@ impl Plugin for JackdawRemotePlugin {
 
         app.insert_resource(JackdawAppInfo {
             app_name,
-            bevy_version: "0.18".to_string(),
+            bevy_version: "0.19".to_string(),
         });
 
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(
                 RemotePlugin::default()
-                    .with_method("jackdaw/app_info", jackdaw_app_info_handler)
-                    .with_method("jackdaw/scene_snapshot", scene_snapshot_handler),
+                    .with_method_main("jackdaw/app_info", jackdaw_app_info_handler)
+                    .with_method_main("jackdaw/scene_snapshot", scene_snapshot_handler),
             );
             app.add_plugins(RemoteHttpPlugin::default().with_port(self.port));
         }

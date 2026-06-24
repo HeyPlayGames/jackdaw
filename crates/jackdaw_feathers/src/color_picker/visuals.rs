@@ -113,7 +113,7 @@ pub(super) fn update_color_picker_visuals(
             if alpha_handle_mat.0 != picker_entity {
                 continue;
             }
-            if let Some(material) = checkerboard_materials.get_mut(&material_node.0) {
+            if let Some(mut material) = checkerboard_materials.get_mut(&material_node.0) {
                 material.color = Vec4::new(
                     current_color.red,
                     current_color.green,
@@ -127,7 +127,7 @@ pub(super) fn update_color_picker_visuals(
             if preview_mat.0 != picker_entity {
                 continue;
             }
-            if let Some(material) = checkerboard_materials.get_mut(&material_node.0) {
+            if let Some(mut material) = checkerboard_materials.get_mut(&material_node.0) {
                 material.color = Vec4::new(
                     current_color.red,
                     current_color.green,
@@ -141,7 +141,7 @@ pub(super) fn update_color_picker_visuals(
             if hsv_rect_mat_node.0 != picker_entity {
                 continue;
             }
-            if let Some(material) = hsv_rect_materials.get_mut(&material_node.0) {
+            if let Some(mut material) = hsv_rect_materials.get_mut(&material_node.0) {
                 material.hue = state.hue;
             }
         }
@@ -150,7 +150,7 @@ pub(super) fn update_color_picker_visuals(
             if alpha_mat_node.0 != picker_entity {
                 continue;
             }
-            if let Some(material) = alpha_materials.get_mut(&material_node.0) {
+            if let Some(mut material) = alpha_materials.get_mut(&material_node.0) {
                 let (r, g, b) = hsv_to_rgb(state.hue, state.saturation, state.brightness.min(1.0));
                 material.color = Vec4::new(r, g, b, 1.0);
             }
@@ -172,7 +172,7 @@ pub(super) fn update_trigger_display(
             if swatch_mat.0 != picker_entity {
                 continue;
             }
-            if let Some(material) = checkerboard_materials.get_mut(&material_node.0) {
+            if let Some(mut material) = checkerboard_materials.get_mut(&material_node.0) {
                 material.color = Vec4::new(srgba.red, srgba.green, srgba.blue, srgba.alpha);
             }
         }

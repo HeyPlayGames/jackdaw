@@ -65,7 +65,7 @@ pub fn apply_frame(
     if let Some(handle) = &stream.image
         && stream.size == size
     {
-        if let Some(image) = images.get_mut(handle) {
+        if let Some(mut image) = images.get_mut(handle) {
             image.data = Some(frame.pixels.to_vec());
         }
     } else {

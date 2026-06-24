@@ -130,7 +130,7 @@ pub fn activate_draw_brush_modal(
         } else {
             None
         };
-        input_focus.0 = None;
+        input_focus.clear();
 
         // Exit brush edit mode if active
         if *edit_mode != crate::brush::EditMode::Object {
