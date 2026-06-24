@@ -83,7 +83,7 @@ fn setup(
     commands.spawn((
         Name::new("Sun"),
         DirectionalLight {
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             illuminance: 10000.0,
             ..default()
         },

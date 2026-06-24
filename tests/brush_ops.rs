@@ -36,7 +36,7 @@ fn with_headless_brush_env<F: FnOnce(&mut App)>(f: F) {
     // the brush ops' availability checks treat that as "a text field
     // owns the keyboard" and refuse to run. Clear it so tests see the
     // same state as an editor with the viewport focused.
-    app.world_mut().resource_mut::<InputFocus>().0 = None;
+    app.world_mut().resource_mut::<InputFocus>().clear();
     f(&mut app);
 }
 

@@ -65,10 +65,10 @@ fn serialize_world_to_jsn_scene_captures_brushes() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -96,10 +96,10 @@ fn swap_round_trips_a_single_brush() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -174,10 +174,10 @@ fn swap_preserves_camera_transform_per_tab() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -230,10 +230,10 @@ fn scene_new_appends_an_untitled_tab() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -277,10 +277,10 @@ fn scene_open_dedupes_by_path() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -338,10 +338,10 @@ fn make_app_with_n_tabs(n: usize) -> bevy::app::App {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -730,10 +730,10 @@ fn tab_swap_preserves_entity_ordering_and_components() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -880,10 +880,10 @@ fn scene_open_flags_dirty_when_ids_need_migration() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
@@ -1037,10 +1037,10 @@ fn finish_load_scene_entities_and_ast_share_ids_after_heal() {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),

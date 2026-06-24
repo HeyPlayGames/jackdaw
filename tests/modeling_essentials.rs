@@ -269,7 +269,7 @@ fn non_bisecting_mirror_leaves_every_vert_editable() {
 /// owns the keyboard" (same setup as the `brush_ops` tests).
 fn select_for_operators(app: &mut App, entity: Entity) {
     use bevy::input_focus::InputFocus;
-    app.world_mut().resource_mut::<InputFocus>().0 = None;
+    app.world_mut().resource_mut::<InputFocus>().clear();
     app.world_mut()
         .resource_mut::<jackdaw::selection::Selection>()
         .entities = vec![entity];
@@ -289,7 +289,7 @@ fn mirror_ops_gate_on_selection_and_component() {
     app.update();
     app.world_mut()
         .resource_mut::<bevy::input_focus::InputFocus>()
-        .0 = None;
+        .clear();
     app.update();
 
     // Empty selection: nothing is available.

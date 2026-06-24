@@ -40,7 +40,7 @@ fn spawn_half_cube(app: &mut App) -> Entity {
 /// owns the keyboard".
 fn select_for_operators(app: &mut App, entity: Entity) {
     use bevy::input_focus::InputFocus;
-    app.world_mut().resource_mut::<InputFocus>().0 = None;
+    app.world_mut().resource_mut::<InputFocus>().clear();
     app.world_mut()
         .resource_mut::<jackdaw::selection::Selection>()
         .entities = vec![entity];
