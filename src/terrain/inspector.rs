@@ -6,8 +6,7 @@ use jackdaw_feathers::{
     combobox::{self, ComboBoxChangeEvent},
     text_edit::{
         self, TextEditCommitEvent, TextEditDragging, TextEditProps, TextEditVariant,
-        TextEditWrapper, TextInputBuffer, TextInputQueue, format_numeric_value,
-        set_text_input_value,
+        TextEditWrapper, format_numeric_value, set_text_input_value,
     },
     tokens,
 };
@@ -197,7 +196,7 @@ fn update_terrain_inspector(
     commands.spawn((
         Text::new("Noise Type"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -371,7 +370,7 @@ fn sync_brush_fields(
     wrapper_query: Query<&TextEditWrapper>,
     dragging_query: Query<(), With<TextEditDragging>>,
     children_query: Query<&Children>,
-    mut queue_query: Query<(&TextInputBuffer, &mut TextInputQueue)>,
+    mut editable_query: Query<&mut bevy::text::EditableText>,
 ) {
     if !brush_settings.is_changed() {
         return;
@@ -388,14 +387,14 @@ fn sync_brush_fields(
         let mut found = false;
         for child in children.iter() {
             if let Ok(wrapper) = wrapper_query.get(child) {
-                if dragging_query.get(child).is_ok() || input_focus.0 == Some(wrapper.0) {
+                if dragging_query.get(child).is_ok() || input_focus.get() == Some(wrapper.0) {
                     found = true;
                     break;
                 }
-                if let Ok((buffer, mut queue)) = queue_query.get_mut(wrapper.0) {
-                    let current: String = buffer.get_text();
+                if let Ok(mut editable) = editable_query.get_mut(wrapper.0) {
+                    let current: String = editable.value().into_iter().collect();
                     if current != formatted {
-                        set_text_input_value(&mut queue, formatted.clone());
+                        set_text_input_value(&mut editable, formatted.clone());
                     }
                 }
                 found = true;
@@ -410,14 +409,14 @@ fn sync_brush_fields(
             if let Ok(grandchildren) = children_query.get(child) {
                 for gc in grandchildren.iter() {
                     if let Ok(wrapper) = wrapper_query.get(gc) {
-                        if dragging_query.get(gc).is_ok() || input_focus.0 == Some(wrapper.0) {
+                        if dragging_query.get(gc).is_ok() || input_focus.get() == Some(wrapper.0) {
                             found = true;
                             break;
                         }
-                        if let Ok((buffer, mut queue)) = queue_query.get_mut(wrapper.0) {
-                            let current: String = buffer.get_text();
+                        if let Ok(mut editable) = editable_query.get_mut(wrapper.0) {
+                            let current: String = editable.value().into_iter().collect();
                             if current != formatted {
-                                set_text_input_value(&mut queue, formatted.clone());
+                                set_text_input_value(&mut editable, formatted.clone());
                             }
                         }
                         found = true;
@@ -457,7 +456,7 @@ fn spawn_labeled_field(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -467,7 +466,7 @@ fn spawn_labeled_field(
     commands.spawn((
         Text::new(tooltip),
         TextFont {
-            font_size: 10.0,
+            font_size: tokens::TEXT_SIZE_XS,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -508,7 +507,7 @@ fn spawn_gen_field(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -518,7 +517,7 @@ fn spawn_gen_field(
     commands.spawn((
         Text::new(tooltip),
         TextFont {
-            font_size: 10.0,
+            font_size: tokens::TEXT_SIZE_XS,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -559,7 +558,7 @@ fn spawn_erosion_field(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -569,7 +568,7 @@ fn spawn_erosion_field(
     commands.spawn((
         Text::new(tooltip),
         TextFont {
-            font_size: 10.0,
+            font_size: tokens::TEXT_SIZE_XS,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),

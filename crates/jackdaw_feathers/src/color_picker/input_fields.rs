@@ -1,7 +1,6 @@
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
-use bevy_ui_text_input::TextInputQueue;
-use bevy_ui_text_input::actions::{TextInputAction, TextInputEdit};
+use bevy::text::EditableText;
 
 use super::color_math::{parse_hex, rgb_to_hsv};
 use super::{
@@ -9,8 +8,10 @@ use super::{
 };
 
 use crate::combobox::{ComboBoxChangeEvent, combobox_icon_with_selected};
-use crate::text_edit::{EditorTextEdit, TextEditPrefix, TextEditProps, text_edit};
-use crate::tokens::{TEXT_MUTED_COLOR, TEXT_SIZE};
+use crate::text_edit::{
+    EditorTextEdit, TextEditPrefix, TextEditProps, set_text_input_value, text_edit,
+};
+use crate::tokens::{TEXT_MUTED_COLOR, TEXT_SIZE, TEXT_SIZE_PX};
 use crate::utils::{find_ancestor, is_descendant_of};
 
 #[derive(Component, Clone, Copy)]
@@ -271,7 +272,7 @@ fn spawn_single_input_field(
     if is_hex {
         props = props.with_prefix(TextEditPrefix::Label {
             label: "#".to_string(),
-            size: TEXT_SIZE,
+            size: TEXT_SIZE_PX,
             color: None,
         });
     }
@@ -344,10 +345,10 @@ pub(super) fn handle_input_field_blur(
     mut commands: Commands,
     mut pickers: Query<&mut ColorPickerState>,
     input_fields: Query<&ColorInputField>,
-    text_inputs: Query<&bevy_ui_text_input::TextInputBuffer, With<EditorTextEdit>>,
+    text_inputs: Query<&EditableText, With<EditorTextEdit>>,
     parents: Query<&ChildOf>,
 ) {
-    let current_focus = input_focus.0;
+    let current_focus = input_focus.get();
     let previous_focus = *last_focus;
     *last_focus = current_focus;
 
@@ -358,7 +359,7 @@ pub(super) fn handle_input_field_blur(
         return;
     }
 
-    let Ok(buffer) = text_inputs.get(blurred_entity) else {
+    let Ok(editable) = text_inputs.get(blurred_entity) else {
         return;
     };
 
@@ -370,7 +371,7 @@ pub(super) fn handle_input_field_blur(
         return;
     };
 
-    let text = buffer.get_text();
+    let text = editable.value().into_iter().collect::<String>();
     if text.is_empty() {
         return;
     }
@@ -391,7 +392,7 @@ pub(super) fn sync_text_inputs_to_state(
     input_focus: Res<InputFocus>,
     pickers: Query<(Entity, &ColorPickerState), Changed<ColorPickerState>>,
     input_fields: Query<(Entity, &ColorInputField)>,
-    mut text_inputs: Query<(Entity, &mut TextInputQueue), With<EditorTextEdit>>,
+    mut text_inputs: Query<(Entity, &mut EditableText), With<EditorTextEdit>>,
     parents: Query<&ChildOf>,
 ) {
     for (picker_entity, state) in &pickers {
@@ -402,14 +403,13 @@ pub(super) fn sync_text_inputs_to_state(
 
             let text = field.kind.format_value(state);
 
-            for (text_input_entity, mut queue) in &mut text_inputs {
-                if input_focus.0 == Some(text_input_entity) {
+            for (text_input_entity, mut editable) in &mut text_inputs {
+                if input_focus.get() == Some(text_input_entity) {
                     continue;
                 }
 
                 if is_descendant_of(text_input_entity, field_entity, &parents) {
-                    queue.add(TextInputAction::Edit(TextInputEdit::SelectAll));
-                    queue.add(TextInputAction::Edit(TextInputEdit::Paste(text.clone())));
+                    set_text_input_value(&mut editable, text.clone());
                 }
             }
         }

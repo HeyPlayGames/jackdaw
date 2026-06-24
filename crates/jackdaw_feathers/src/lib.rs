@@ -36,8 +36,6 @@ pub struct EditorFeathersPlugin;
 
 impl Plugin for EditorFeathersPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        // text_edit::plugin adds TextInputPlugin which adds InputDispatchPlugin,
-        // so we must not add InputDispatchPlugin ourselves.
         app.add_plugins((
             jackdaw_widgets::EditorWidgetsPlugins,
             split_panel::SplitPanelPlugin,

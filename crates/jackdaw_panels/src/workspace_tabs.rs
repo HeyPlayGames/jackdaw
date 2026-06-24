@@ -1,10 +1,11 @@
 use std::collections::HashMap as StdHashMap;
 
-use bevy::input_focus::InputFocus;
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use jackdaw_feathers::text_edit::{
     self, EditorTextEdit, TextEditCommitEvent, TextEditConfig, TextEditProps,
 };
+use jackdaw_feathers::tokens::{TEXT_SIZE, TEXT_SIZE_SM, TEXT_SIZE_XS};
 use lucide_icons::Icon;
 
 use crate::tree::DockTree;
@@ -182,11 +183,11 @@ fn spawn_workspace_tab(
 
     if let Some(icon_char) = &workspace.icon {
         let mut font = TextFont {
-            font_size: 12.0,
+            font_size: TEXT_SIZE,
             ..default()
         };
         if let Some(handle) = icon_font {
-            font.font = handle.clone();
+            font.font = handle.clone().into();
         }
         world.spawn((
             Text::new(icon_char.clone()),
@@ -202,7 +203,7 @@ fn spawn_workspace_tab(
         },
         Text::new(workspace.name.clone()),
         TextFont {
-            font_size: 11.0,
+            font_size: TEXT_SIZE_SM,
             ..default()
         },
         TextColor(label_color),
@@ -233,8 +234,8 @@ fn spawn_workspace_tab(
         world.spawn((
             Text::new(String::from(Icon::X.unicode())),
             TextFont {
-                font: handle.clone(),
-                font_size: 10.0,
+                font: handle.clone().into(),
+                font_size: TEXT_SIZE_XS,
                 ..default()
             },
             TextColor(TAB_INACTIVE_LABEL),
@@ -263,11 +264,11 @@ fn spawn_add_workspace_button(world: &mut World, strip: Entity, icon_font: Optio
         .id();
 
     let mut font = TextFont {
-        font_size: 14.0,
+        font_size: TEXT_SIZE,
         ..default()
     };
     if let Some(handle) = icon_font {
-        font.font = handle.clone();
+        font.font = handle.clone().into();
     }
     world.spawn((
         Text::new(String::from(Icon::Plus.unicode())),
@@ -500,7 +501,7 @@ pub fn auto_focus_workspace_rename(
             if let Ok(wrapper_kids) = wrapper_children.get(child) {
                 for wk in wrapper_kids.iter() {
                     if editor_text_edits.contains(wk) {
-                        input_focus.0 = Some(wk);
+                        input_focus.set(wk, FocusCause::Pressed);
                         return;
                     }
                 }

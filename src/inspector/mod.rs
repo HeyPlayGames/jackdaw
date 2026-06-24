@@ -200,9 +200,7 @@ fn persist_inspector_collapse(
 /// having to deselect and reselect the entity.
 fn refresh_name_field(world: &mut World) {
     use bevy::input_focus::InputFocus;
-    use jackdaw_feathers::text_edit::{
-        TextEditDragging, TextEditValue, TextInputQueue, set_text_input_value,
-    };
+    use jackdaw_feathers::text_edit::{TextEditDragging, TextEditValue, set_text_input_value};
 
     // Gather (outer, source_entity, current_value) tuples.
     let mut targets: Vec<(Entity, Entity, String)> = Vec::new();
@@ -214,7 +212,7 @@ fn refresh_name_field(world: &mut World) {
         return;
     }
 
-    let input_focus = world.resource::<InputFocus>().0;
+    let input_focus = world.resource::<InputFocus>().get();
 
     for (outer, source, current) in targets {
         let Some(name) = world.get::<Name>(source) else {
@@ -236,8 +234,8 @@ fn refresh_name_field(world: &mut World) {
         if input_focus == Some(inner_entity) {
             continue;
         }
-        if let Some(mut queue) = world.get_mut::<TextInputQueue>(inner_entity) {
-            set_text_input_value(&mut queue, expected);
+        if let Some(mut editable) = world.get_mut::<bevy::text::EditableText>(inner_entity) {
+            set_text_input_value(&mut editable, expected);
         }
     }
 }

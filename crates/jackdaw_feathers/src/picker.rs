@@ -35,12 +35,10 @@ use bevy::ecs::relationship::RelatedSpawner;
 use bevy::ecs::system::SystemId;
 use bevy::ecs::world::DeferredWorld;
 use bevy::feathers::font_styles::InheritableFont;
-use bevy::feathers::handle_or_path::HandleOrPath;
 use bevy::feathers::theme::ThemedText;
-use bevy::input_focus::InputFocus;
 use bevy::input_focus::tab_navigation::{TabGroup, TabIndex};
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
-use bevy_ui_text_input::SubmitText;
 use jackdaw_fuzzy::FuzzyMatcher;
 pub use jackdaw_fuzzy::{Category, Match, Matchable, MatchedStr};
 use lucide_icons::Icon;
@@ -51,7 +49,7 @@ use crate::button::{
 use crate::icons::{EditorFont, IconFont};
 use crate::scroll::scrollbar;
 use crate::separator::{SeparatorProps, separator};
-use crate::text_edit::{TextEditProps, TextEditValue, text_edit};
+use crate::text_edit::{TextEditCommitEvent, TextEditProps, TextEditValue, text_edit};
 use crate::tokens;
 
 /// This trait is implemented for anything that implements [`Matchable`], [`Send`] and [`Sync`].
@@ -63,7 +61,7 @@ impl<T: Matchable + Send + Sync + 'static> Pickable for T {}
 /// A picker, used for selecting from a list of items.
 /// Created by spawning an entity with the [`PickerProps`] component. See the [module docs](crate::picker) for more info
 #[derive(Component)]
-#[component(on_replace)]
+#[component(on_remove = Picker::on_remove)]
 pub struct Picker {
     dismissible: bool,
     matcher: FuzzyMatcher<Item>,
@@ -247,7 +245,7 @@ impl<T: Pickable> PickerProps<T> {
                             children![(
                                 Text(title),
                                 TextFont {
-                                    font,
+                                    font: font.into(),
                                     font_size: tokens::TEXT_SIZE_XL,
                                     weight: FontWeight::SEMIBOLD,
                                     ..default()
@@ -422,7 +420,7 @@ fn scroll_to_picker_item(
         return;
     };
 
-    let Some(focused) = focus.0 else {
+    let Some(focused) = focus.get() else {
         return;
     };
 
@@ -531,8 +529,9 @@ impl MatchText {
         let font = world.resource::<EditorFont>().0.clone();
         let mut commands = world.commands();
         commands.entity(ctx.entity).insert(InheritableFont {
-            font: HandleOrPath::Handle(font),
+            font,
             font_size: tokens::TEXT_SIZE,
+            ..default()
         });
     }
 }
@@ -654,36 +653,39 @@ fn on_picker_selected(
 }
 
 fn on_text_edit_submit(
-    mut submit_messages: MessageReader<SubmitText>,
+    trigger: On<TextEditCommitEvent>,
     inputs: Query<&PickerInputOf>,
     child_of: Query<&ChildOf>,
     mut pickers: Query<(Entity, &mut Picker)>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
 ) {
-    for submit in submit_messages.read() {
-        // please give me relational queries i'm begging
-        let Some(input_of) = std::iter::once(submit.entity)
-            .chain(child_of.iter_ancestors(submit.entity))
-            .find_map(|e| inputs.get(e).ok())
-        else {
-            continue;
-        };
+    let commit = trigger.event();
+    let Some(input_of) = std::iter::once(commit.entity)
+        .chain(child_of.iter_ancestors(commit.entity))
+        .find_map(|entity| inputs.get(entity).ok())
+    else {
+        return;
+    };
 
-        let Ok((picker_entity, mut picker)) = pickers.get_mut(input_of.0) else {
-            continue;
-        };
+    let Ok((picker_entity, mut picker)) = pickers.get_mut(input_of.0) else {
+        return;
+    };
 
-        picker.matcher.update_pattern(&submit.text);
-        let matches = picker.matcher.matches();
-        let Some(first) = matches.first().and_then(|c| c.items.first()) else {
-            continue;
-        };
-
-        commands.trigger(PickerSelect {
-            entity: picker_entity,
-            index: first.index,
-        });
+    if !keyboard.just_pressed(KeyCode::Enter) && !keyboard.just_pressed(KeyCode::NumpadEnter) {
+        return;
     }
+
+    picker.matcher.update_pattern(&commit.text);
+    let matches = picker.matcher.matches();
+    let Some(first) = matches.first().and_then(|c| c.items.first()) else {
+        return;
+    };
+
+    commands.trigger(PickerSelect {
+        entity: picker_entity,
+        index: first.index,
+    });
 }
 
 #[derive(Resource, Default)]
@@ -753,11 +755,11 @@ fn display_ordered_picker_items(
 fn picker_host_from_focus(
     focused_entity: Entity,
     child_of: &Query<&ChildOf>,
-    pickers: &Query<(Entity, &WithPickerList), With<Picker>>,
+    pickers: &Query<(Entity, &Picker, &WithPickerList)>,
 ) -> Option<(Entity, Entity)> {
     for candidate in std::iter::once(focused_entity).chain(child_of.iter_ancestors(focused_entity))
     {
-        if let Ok((picker_entity, with_list)) = pickers.get(candidate) {
+        if let Ok((picker_entity, _, with_list)) = pickers.get(candidate) {
             return Some((picker_entity, with_list.0));
         }
     }
@@ -771,7 +773,7 @@ fn picker_keyboard_navigation(
     mut navigation_repeat: ResMut<PickerNavigationRepeat>,
     child_of: Query<&ChildOf>,
     children: Query<&Children>,
-    pickers: Query<(Entity, &WithPickerList), With<Picker>>,
+    pickers: Query<(Entity, &Picker, &WithPickerList)>,
     picker_items: Query<(Entity, &PickerItem)>,
     mut commands: Commands,
 ) {
@@ -795,7 +797,7 @@ fn picker_keyboard_navigation(
         return;
     }
 
-    let Some(focused_entity) = focus.0 else {
+    let Some(focused_entity) = focus.get() else {
         return;
     };
 
@@ -804,6 +806,15 @@ fn picker_keyboard_navigation(
     else {
         return;
     };
+
+    if keyboard.just_pressed(KeyCode::Escape) {
+        if let Ok((_, picker, _)) = pickers.get(picker_entity)
+            && picker.dismissible
+        {
+            commands.trigger(DismissPickerEvent(picker_entity));
+        }
+        return;
+    }
 
     let items_for_picker = display_ordered_picker_items(list_entity, &children, &picker_items);
 
@@ -851,7 +862,7 @@ fn picker_keyboard_navigation(
     };
 
     if let Some(entity) = next_focus {
-        focus.0 = Some(entity);
+        focus.set(entity, FocusCause::Navigated);
     }
 }
 
@@ -938,7 +949,7 @@ impl<T: Pickable> PickerProps<T> {
 }
 
 impl Picker {
-    fn on_replace(mut world: DeferredWorld, ctx: HookContext) {
+    fn on_remove(mut world: DeferredWorld, ctx: HookContext) {
         let entity = world.entity(ctx.entity);
         let Some(picker) = entity.get::<Self>() else {
             return;
@@ -976,10 +987,10 @@ pub(crate) fn plugin(app: &mut App) {
             Update,
             (
                 process_pickers,
-                on_text_edit_submit,
                 (picker_keyboard_navigation, scroll_to_picker_item).chain(),
             ),
         )
+        .add_observer(on_text_edit_submit)
         .add_observer(on_picker_selected)
         .add_observer(on_picker_dismissed)
         .add_observer(on_picker_item_activated)

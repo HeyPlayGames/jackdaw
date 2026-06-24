@@ -112,7 +112,6 @@ use bevy::{
     ecs::system::SystemState,
     feathers::{FeathersPlugins, dark_theme::create_dark_theme, theme::UiTheme},
     input::mouse::{MouseScrollUnit, MouseWheel},
-    input_focus::InputDispatchPlugin,
     picking::hover::HoverMap,
     platform::collections::HashMap,
     prelude::*,
@@ -268,24 +267,13 @@ pub struct EditorCorePlugin;
 
 impl Plugin for EditorCorePlugin {
     fn build(&self, app: &mut App) {
-        // Disable `InputDispatchPlugin` from FeathersPlugins
-        // because `bevy_ui_text_input`'s `TextInputPlugin` adds
-        // it unconditionally and panics on duplicates.
-        //
-        // `EnhancedInputPlugin` is owned by the hosting binary's
-        // `main.rs` (launcher + the static template's
-        // `editor.rs.template`). Asserting presence here, rather
-        // than adding it, lets user `MyGamePlugin`s add the same
-        // plugin without a duplicate-plugin panic.
         debug_assert!(
             app.is_plugin_added::<EnhancedInputPlugin>(),
             "EditorCorePlugin requires EnhancedInputPlugin first; \
              add `EnhancedInputPlugin` in main.rs before EditorPlugins."
         );
-        app.init_state::<AppState>().add_plugins((
-            FeathersPlugins.build().disable::<InputDispatchPlugin>(),
-            EditorFeathersPlugin,
-        ));
+        app.init_state::<AppState>()
+            .add_plugins((FeathersPlugins, EditorFeathersPlugin));
         app.add_plugins((
             jackdaw_jsn::JsnPlugin {
                 runtime_mesh_rebuild: false,
@@ -1246,7 +1234,7 @@ fn has_selected_keyframes(
         )>,
     >,
 ) -> bool {
-    if input_focus.0.is_some() {
+    if input_focus.get().is_some() {
         return false;
     }
     selection.entities.iter().any(|&e| keyframes.contains(e))
@@ -1258,7 +1246,7 @@ fn timeline_with_clip(
     tree: Res<jackdaw_panels::tree::DockTree>,
     selected_clip: Res<jackdaw_animation::SelectedClip>,
 ) -> bool {
-    if input_focus.0.is_some() || active.is_modal_running() {
+    if input_focus.get().is_some() || active.is_modal_running() {
         return false;
     }
     if !crate::transform_ops::active_tab_kind_present(&tree, "jackdaw.timeline") {
@@ -1274,7 +1262,7 @@ fn timeline_paste_available(
     selected_clip: Res<jackdaw_animation::SelectedClip>,
     clipboard: Res<jackdaw_animation::KeyframeClipboard>,
 ) -> bool {
-    if input_focus.0.is_some() || active.is_modal_running() {
+    if input_focus.get().is_some() || active.is_modal_running() {
         return false;
     }
     if !crate::transform_ops::active_tab_kind_present(&tree, "jackdaw.timeline") {
@@ -2051,7 +2039,9 @@ fn populate_menu(
     >,
     items: &mut QueryState<Entity, With<jackdaw_widgets::menu_bar::MenuBarItem>>,
 ) {
-    let menu_bar_entity = *menu_bar_entity.get(world);
+    let Ok(menu_bar_entity) = menu_bar_entity.get(world).map(Single::into_inner) else {
+        return;
+    };
 
     // Despawn existing menu-bar items before re-populating. Idempotent on
     // first call (nothing to remove), necessary for rebuilds when the
@@ -2445,8 +2435,8 @@ pub(crate) fn open_recent_dialog(world: &mut World) {
                     (
                         Text::new(name),
                         TextFont {
-                            font: font.clone(),
-                            font_size: jackdaw_feathers::tokens::FONT_LG,
+                            font: font.clone().into(),
+                            font_size: jackdaw_feathers::tokens::TEXT_SIZE_LG,
                             ..Default::default()
                         },
                         TextColor(jackdaw_feathers::tokens::TEXT_PRIMARY),
@@ -2455,8 +2445,8 @@ pub(crate) fn open_recent_dialog(world: &mut World) {
                     (
                         Text::new(path_display),
                         TextFont {
-                            font,
-                            font_size: jackdaw_feathers::tokens::FONT_SM,
+                            font: font.into(),
+                            font_size: jackdaw_feathers::tokens::TEXT_SIZE_SM,
                             ..Default::default()
                         },
                         TextColor(jackdaw_feathers::tokens::TEXT_SECONDARY),

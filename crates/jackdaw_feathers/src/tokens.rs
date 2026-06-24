@@ -1,5 +1,6 @@
 use bevy::color::palettes::tailwind;
 use bevy::prelude::*;
+use bevy::text::FontSize;
 
 // ---------------------------------------------------------------------------
 // Corner radii
@@ -281,17 +282,17 @@ pub const FILE_ICON_COLOR: Color = Color::Srgba(tailwind::ZINC_400);
 // Typography
 // ---------------------------------------------------------------------------
 
-pub const TEXT_SIZE_XS: f32 = 9.0;
-pub const TEXT_SIZE_SM: f32 = 11.0;
-pub const TEXT_SIZE: f32 = 13.0;
-pub const TEXT_SIZE_LG: f32 = 15.0;
-pub const TEXT_SIZE_XL: f32 = 18.0;
+pub const TEXT_SIZE_XS_PX: f32 = 9.0;
+pub const TEXT_SIZE_SM_PX: f32 = 11.0;
+pub const TEXT_SIZE_PX: f32 = 13.0;
+pub const TEXT_SIZE_LG_PX: f32 = 15.0;
+pub const TEXT_SIZE_XL_PX: f32 = 18.0;
 
-// Keep old names as aliases for existing code
-pub const FONT_XS: f32 = TEXT_SIZE_XS;
-pub const FONT_SM: f32 = TEXT_SIZE_SM;
-pub const FONT_MD: f32 = TEXT_SIZE;
-pub const FONT_LG: f32 = TEXT_SIZE_LG;
+pub const TEXT_SIZE_XS: FontSize = FontSize::Px(TEXT_SIZE_XS_PX);
+pub const TEXT_SIZE_SM: FontSize = FontSize::Px(TEXT_SIZE_SM_PX);
+pub const TEXT_SIZE: FontSize = FontSize::Px(TEXT_SIZE_PX);
+pub const TEXT_SIZE_LG: FontSize = FontSize::Px(TEXT_SIZE_LG_PX);
+pub const TEXT_SIZE_XL: FontSize = FontSize::Px(TEXT_SIZE_XL_PX);
 
 /// Truncation width for browser thumbnail filename labels (asset
 /// browser, material browser).
@@ -310,11 +311,15 @@ pub const PREVIEW_IMAGE_SIZE: f32 = 128.0;
 // ---------------------------------------------------------------------------
 
 /// Small icon size, standard Lucide icons (15px frame)
-pub const ICON_SM: f32 = 15.0;
+pub const ICON_SM_PX: f32 = 15.0;
 /// Medium icon size, sidebar icons (17px)
-pub const ICON_MD: f32 = 17.0;
+pub const ICON_MD_PX: f32 = 17.0;
 /// Large icon size (24px)
-pub const ICON_LG: f32 = 24.0;
+pub const ICON_LG_PX: f32 = 24.0;
+
+pub const ICON_SM: FontSize = FontSize::Px(ICON_SM_PX);
+pub const ICON_MD: FontSize = FontSize::Px(ICON_MD_PX);
+pub const ICON_LG: FontSize = FontSize::Px(ICON_LG_PX);
 
 // ---------------------------------------------------------------------------
 // Spacing
