@@ -191,7 +191,9 @@ mod tests {
     #[test]
     fn double_click_first_press_returns_ongoing() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = DoubleClick::new(0.3);
 
         // First press edge: should be Ongoing, not Fired.
@@ -204,7 +206,9 @@ mod tests {
     #[test]
     fn double_click_fires_on_second_press_within_window() {
         let (mut world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = DoubleClick::new(0.3);
 
         // First press.
@@ -216,7 +220,9 @@ mod tests {
         world
             .resource_mut::<Time<Real>>()
             .advance_by(Duration::from_millis(100));
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
 
         // Second press within the window: must fire.
         assert_eq!(
@@ -228,7 +234,9 @@ mod tests {
     #[test]
     fn double_click_does_not_fire_when_spaced_beyond_window() {
         let (mut world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = DoubleClick::new(0.3);
 
         // First press.
@@ -238,7 +246,9 @@ mod tests {
         world
             .resource_mut::<Time<Real>>()
             .advance_by(Duration::from_millis(400));
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
 
         // Second press should NOT fire because the window already expired.
         let result = cond.evaluate(&actions, &time, ActionValue::Bool(true));
@@ -252,7 +262,9 @@ mod tests {
     #[test]
     fn double_click_resets_after_fire() {
         let (mut world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = DoubleClick::new(0.3);
 
         // First press.
@@ -263,7 +275,9 @@ mod tests {
         world
             .resource_mut::<Time<Real>>()
             .advance_by(Duration::from_millis(50));
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
 
         // Second press fires.
         let fired = cond.evaluate(&actions, &time, ActionValue::Bool(true));
@@ -275,7 +289,9 @@ mod tests {
         world
             .resource_mut::<Time<Real>>()
             .advance_by(Duration::from_millis(10));
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
 
         // Third press: state was reset, so this is a NEW first press (Ongoing),
         // not an immediate re-fire.
@@ -290,7 +306,9 @@ mod tests {
     #[test]
     fn double_click_no_fire_on_zero_value() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = DoubleClick::new(0.3);
 
         assert_eq!(
@@ -304,7 +322,9 @@ mod tests {
     #[test]
     fn scroll_tick_fires_on_positive_y() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = ScrollTick::new(true);
 
         assert_eq!(
@@ -316,7 +336,9 @@ mod tests {
     #[test]
     fn scroll_tick_does_not_fire_on_negative_y_when_positive() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = ScrollTick::new(true);
 
         assert_eq!(
@@ -328,7 +350,9 @@ mod tests {
     #[test]
     fn scroll_tick_fires_on_negative_y_when_negative() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = ScrollTick::new(false);
 
         assert_eq!(
@@ -340,7 +364,9 @@ mod tests {
     #[test]
     fn scroll_tick_does_not_fire_on_zero() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = ScrollTick::new(true);
 
         assert_eq!(
@@ -352,7 +378,9 @@ mod tests {
     #[test]
     fn scroll_tick_fires_once_per_evaluation_not_per_unit() {
         let (world, mut state) = init_world();
-        let (time, actions) = state.get(&world);
+        let Ok((time, actions)) = state.get(&world) else {
+            panic!("failed to get system state");
+        };
         let mut cond = ScrollTick::new(true);
 
         // A large delta of 5.0 should still fire exactly once.

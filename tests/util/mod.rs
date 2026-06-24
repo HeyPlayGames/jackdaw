@@ -17,10 +17,10 @@ pub fn headless_app() -> App {
     app.add_plugins(
         DefaultPlugins
             .set(RenderPlugin {
-                render_creation: RenderCreation::Automatic(WgpuSettings {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
                     backends: None,
                     ..default()
-                }),
+                })),
                 ..default()
             })
             .disable::<WinitPlugin>(),
