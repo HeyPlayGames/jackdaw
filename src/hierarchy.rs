@@ -1,6 +1,10 @@
 use std::collections::HashSet;
 
-use bevy::{input_focus::InputFocus, prelude::*, ui::ui_transform::UiGlobalTransform};
+use bevy::{
+    input_focus::{FocusCause, InputFocus},
+    prelude::*,
+    ui::ui_transform::UiGlobalTransform,
+};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_monitors::prelude::{Mutation, NotifyChanged};
 use jackdaw_api::prelude::*;
@@ -171,7 +175,7 @@ fn classify_entity(world: &World, entity: Entity) -> EntityCategory {
     if world.get::<jackdaw_jsn::SceneRootTag>(entity).is_some() {
         return EntityCategory::Scene;
     }
-    if world.get::<SceneRoot>(entity).is_some() {
+    if world.get::<WorldAssetRoot>(entity).is_some() {
         return EntityCategory::Scene;
     }
     // An entity with no type of its own but with children reads as a grouping
@@ -1851,7 +1855,9 @@ struct RestoreLabel {
 }
 
 impl Command for RestoreLabel {
-    fn apply(self, world: &mut World) {
+    type Out = ();
+
+    fn apply(self, world: &mut World) -> Self::Out {
         let Ok(mut ec) = world.get_entity_mut(self.label_entity) else {
             return;
         };
@@ -1961,8 +1967,8 @@ fn auto_focus_inline_rename(
             if let Ok(wrapper_kids) = wrapper_children.get(child) {
                 for wk in wrapper_kids.iter() {
                     if editor_text_edits.contains(wk) {
-                        if input_focus.0 != Some(wk) {
-                            input_focus.0 = Some(wk);
+                        if input_focus.get() != Some(wk) {
+                            input_focus.set(wk, FocusCause::Pressed);
                         }
                         return;
                     }

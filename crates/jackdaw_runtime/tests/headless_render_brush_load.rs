@@ -43,7 +43,7 @@ fn null_material_brush_loads_headless_under_render_feature() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::transform::TransformPlugin);
     app.add_plugins(bevy::asset::AssetPlugin::default());
-    app.add_plugins(bevy::scene::ScenePlugin);
+    app.add_plugins(bevy::world_serialization::WorldSerializationPlugin);
     app.add_plugins(JackdawPlugin);
 
     let brush_type_path = <jackdaw_jsn::Brush as TypePath>::type_path().to_string();
@@ -106,7 +106,7 @@ fn existing_material_storage_is_left_intact() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::asset::AssetPlugin::default());
-    app.add_plugins(bevy::scene::ScenePlugin);
+    app.add_plugins(bevy::world_serialization::WorldSerializationPlugin);
 
     // Stand in for the render plugins owning the material asset, and mint a handle
     // against that storage before the jackdaw plugins are added.

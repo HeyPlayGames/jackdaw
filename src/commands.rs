@@ -494,7 +494,7 @@ impl EditorCommand for SpawnEntity {
 
 pub struct DespawnEntity {
     pub entity: Entity,
-    pub scene_snapshot: DynamicScene,
+    pub scene_snapshot: DynamicWorld,
     pub parent: Option<Entity>,
     pub label: String,
 }
@@ -539,11 +539,14 @@ impl EditorCommand for DespawnEntity {
     }
 }
 
-/// Create a `DynamicSceneBuilder` that excludes computed components which become
+/// Create a `DynamicWorldBuilder` that excludes computed components which become
 /// stale when restored (Children references dead mesh entities, visibility flags
 /// block rendering).
-pub(crate) fn filtered_scene_builder(world: &World) -> DynamicSceneBuilder<'_> {
-    DynamicSceneBuilder::from_world(world)
+pub(crate) fn filtered_scene_builder<'w>(
+    world: &'w World,
+    type_registry: &'w bevy::reflect::TypeRegistry,
+) -> DynamicWorldBuilder<'w> {
+    DynamicWorldBuilder::from_world(world, type_registry)
         .deny_component::<Children>()
         .deny_component::<GlobalTransform>()
         .deny_component::<InheritedVisibility>()
@@ -563,11 +566,12 @@ pub(crate) fn deselect_entities(world: &mut World, entities: &[Entity]) {
     selection.entities.retain(|e| !entities.contains(e));
 }
 
-/// Create a `DynamicScene` snapshot of a single entity and all its descendants.
-pub(crate) fn snapshot_entity(world: &World, entity: Entity) -> DynamicScene {
+/// Create a `DynamicWorld` snapshot of a single entity and all its descendants.
+pub(crate) fn snapshot_entity(world: &World, entity: Entity) -> DynamicWorld {
+    let type_registry = world.resource::<AppTypeRegistry>().read();
     let mut entities = Vec::new();
     collect_entity_ids(world, entity, &mut entities);
-    filtered_scene_builder(world)
+    filtered_scene_builder(world, &type_registry)
         .extract_entities(entities.into_iter())
         .build()
 }
@@ -595,14 +599,14 @@ pub(crate) fn collect_entity_ids(world: &World, entity: Entity, out: &mut Vec<En
     }
 }
 
-/// Rebuild a `DynamicScene` by copying its entity data (since `DynamicScene` doesn't impl Clone).
-pub(crate) fn snapshot_rebuild(scene: &DynamicScene) -> DynamicScene {
-    DynamicScene {
+/// Rebuild a `DynamicWorld` by copying its entity data (since `DynamicWorld` doesn't impl Clone).
+pub(crate) fn snapshot_rebuild(scene: &DynamicWorld) -> DynamicWorld {
+    DynamicWorld {
         resources: scene.resources.iter().map(|r| r.to_dynamic()).collect(),
         entities: scene
             .entities
             .iter()
-            .map(|e| bevy::scene::DynamicEntity {
+            .map(|e| bevy::world_serialization::DynamicEntity {
                 entity: e.entity,
                 components: e.components.iter().map(|c| c.to_dynamic()).collect(),
             })

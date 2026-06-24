@@ -24,7 +24,7 @@ fn headless_app() -> App {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::transform::TransformPlugin);
     app.add_plugins(bevy::asset::AssetPlugin::default());
-    app.add_plugins(bevy::scene::ScenePlugin);
+    app.add_plugins(bevy::world_serialization::WorldSerializationPlugin);
     app.add_plugins(JackdawPlugin);
     app
 }

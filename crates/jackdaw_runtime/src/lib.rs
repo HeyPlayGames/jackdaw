@@ -14,6 +14,7 @@ use bevy::image::ImageLoaderSettings;
 use bevy::prelude::*;
 use bevy::reflect::serde::{ReflectDeserializerProcessor, TypedReflectDeserializer};
 use bevy::reflect::{TypeRegistration, TypeRegistry};
+use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
 use jackdaw_jsn::JsnPlugin;
 use jackdaw_jsn::format::{JsnAssets, JsnCatalog, JsnScene, JsnSceneV2};
 use serde::Deserializer;
@@ -464,8 +465,10 @@ fn spawn_scene_entities(
             };
             let label = format!("Scene{scene_index}");
             let full_path = format!("{resolved}#{label}");
-            let scene_handle: Handle<Scene> = asset_server.load(full_path);
-            world.entity_mut(entity).insert(SceneRoot(scene_handle));
+            let scene_handle: Handle<WorldAsset> = asset_server.load(full_path);
+            world
+                .entity_mut(entity)
+                .insert(WorldAssetRoot(scene_handle));
         }
     }
 }
@@ -555,10 +558,9 @@ fn load_inline_assets(
                     if type_path == "bevy_image::image::Image" {
                         if linear_image_names.contains(name) {
                             asset_server
-                                .load_with_settings::<Image, ImageLoaderSettings>(
-                                    &resolved,
-                                    |s: &mut ImageLoaderSettings| s.is_srgb = false,
-                                )
+                                .load_builder()
+                                .with_settings(|s: &mut ImageLoaderSettings| s.is_srgb = false)
+                                .load::<Image>(&resolved)
                                 .untyped()
                         } else {
                             asset_server.load::<Image>(&resolved).untyped()
@@ -792,6 +794,7 @@ impl ReflectDeserializerProcessor for RuntimeDeserializerProcessor<'_> {
             };
             let handle = self
                 .asset_server
+                .load_builder()
                 .load_untyped(format!("{resolved}{label_part}"));
             return Ok(Ok(Box::new(handle).into_partial_reflect()));
         }

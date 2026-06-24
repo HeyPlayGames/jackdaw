@@ -36,7 +36,7 @@ fn project_catalog_populates_resource() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::transform::TransformPlugin);
     app.add_plugins(bevy::asset::AssetPlugin::default());
-    app.add_plugins(bevy::scene::ScenePlugin);
+    app.add_plugins(bevy::world_serialization::WorldSerializationPlugin);
     app.add_plugins(bevy::image::ImagePlugin::default());
     app.insert_resource(JackdawCatalogPath(catalog_path.clone()));
     app.add_plugins(JackdawPlugin);
@@ -64,7 +64,7 @@ fn missing_catalog_leaves_resource_empty() {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(bevy::transform::TransformPlugin);
     app.add_plugins(bevy::asset::AssetPlugin::default());
-    app.add_plugins(bevy::scene::ScenePlugin);
+    app.add_plugins(bevy::world_serialization::WorldSerializationPlugin);
     app.insert_resource(JackdawCatalogPath(PathBuf::from(
         "/definitely/does/not/exist/catalog.jsn",
     )));

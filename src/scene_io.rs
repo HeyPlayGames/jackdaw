@@ -737,7 +737,7 @@ impl<'a> ReflectDeserializerProcessor for JsnDeserializerProcessor<'a> {
             let mut asset_path = crate::entity_ops::to_asset_path(&stem_fs);
             asset_path.push_str(&relative_path[stem_pos..]);
 
-            let handle = self.asset_server.load_untyped(asset_path);
+            let handle = self.asset_server.load_builder().load_untyped(asset_path);
             return Ok(Ok(Box::new(handle).into_partial_reflect()));
         }
 
@@ -1424,13 +1424,15 @@ fn finish_load_scene(world: &mut World, chosen: &std::path::Path) {
         chosen.parent().map(std::path::Path::to_path_buf);
 
     if path.ends_with(".scene.json") {
-        // Legacy format: raw DynamicScene JSON
+        // Legacy format: raw DynamicWorld JSON
         let registry = world.resource::<AppTypeRegistry>().clone();
         let registry = registry.read();
 
-        use bevy::scene::serde::SceneDeserializer;
-        let scene_deserializer = SceneDeserializer {
+        use bevy::world_serialization::serde::WorldDeserializer;
+        let mut asset_server = world.resource_mut::<AssetServer>();
+        let scene_deserializer = WorldDeserializer {
             type_registry: &registry,
+            load_from_path: &mut *asset_server,
         };
         let mut json_de = serde_json::Deserializer::from_str(&json);
         let scene = match scene_deserializer.deserialize(&mut json_de) {
@@ -1640,10 +1642,9 @@ pub fn load_inline_assets(
             let handle = if type_path == "bevy_image::image::Image" {
                 if linear_image_names.contains(name) {
                     asset_server
-                        .load_with_settings::<Image, ImageLoaderSettings>(
-                            &asset_path,
-                            |s: &mut ImageLoaderSettings| s.is_srgb = false,
-                        )
+                        .load_builder()
+                        .with_settings(|s: &mut ImageLoaderSettings| s.is_srgb = false)
+                        .load::<Image>(&asset_path)
                         .untyped()
                 } else {
                     asset_server.load::<Image>(&asset_path).untyped()
@@ -1826,7 +1827,7 @@ pub fn load_scene_from_jsn(
         let asset_server = world.resource::<AssetServer>();
         let asset_path: AssetPath<'static> = crate::entity_ops::to_asset_path(&gltf_path).into();
         let scene = asset_server.load(GltfAssetLabel::Scene(scene_index).from_asset(asset_path));
-        world.entity_mut(entity).insert(SceneRoot(scene));
+        world.entity_mut(entity).insert(WorldAssetRoot(scene));
     }
 
     spawned
@@ -1878,7 +1879,7 @@ pub fn spawn_default_lighting(world: &mut World) {
         .spawn((
             Name::new("Sun"),
             DirectionalLight {
-                shadows_enabled: true,
+                shadow_maps_enabled: true,
                 illuminance: 10000.0,
                 ..default()
             },
