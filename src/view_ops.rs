@@ -10,7 +10,7 @@
 //!   so quad-view / stacked viewport setups respond to whichever
 //!   panel the cursor is in.
 
-use bevy::prelude::*;
+use bevy::{dev_tools::infinite_grid::InfiniteGrid, prelude::*};
 use jackdaw_api::prelude::*;
 use jackdaw_api_internal::keymap::PresetInput;
 
@@ -273,13 +273,7 @@ pub(crate) fn view_set_axis(
         (&mut Transform, &mut Projection, Option<&ViewportGrid>),
         With<MainViewportCamera>,
     >,
-    mut grids: Query<
-        &mut Transform,
-        (
-            With<bevy_infinite_grid::InfiniteGrid>,
-            Without<MainViewportCamera>,
-        ),
-    >,
+    mut grids: Query<&mut Transform, (With<InfiniteGrid>, Without<MainViewportCamera>)>,
 ) -> OperatorResult {
     let axis = read_int_param(&params, "axis").unwrap_or(1);
     let sign_int = read_int_param(&params, "sign").unwrap_or(1);
@@ -318,9 +312,8 @@ pub(crate) fn view_set_axis(
     OperatorResult::Finished
 }
 
-/// Quaternion that orients an infinite-grid entity so its plane faces
-/// the camera looking down the given world axis. The grid's local plane
-/// is XZ; we map it onto:
+/// Orient a viewport grid so its plane faces the camera for axis-aligned ortho views.
+///
 /// - axis 0 (X, side view): YZ plane
 /// - axis 1 (Y, top view): XZ plane (no rotation)
 /// - axis 2 (Z, front view): XY plane
@@ -344,13 +337,7 @@ pub(crate) fn view_toggle_persp_ortho(
     _: In<OperatorParameters>,
     active: Res<ActiveViewport>,
     mut cameras: Query<(&mut Projection, Option<&ViewportGrid>), With<MainViewportCamera>>,
-    mut grids: Query<
-        &mut Transform,
-        (
-            With<bevy_infinite_grid::InfiniteGrid>,
-            Without<MainViewportCamera>,
-        ),
-    >,
+    mut grids: Query<&mut Transform, (With<InfiniteGrid>, Without<MainViewportCamera>)>,
 ) -> OperatorResult {
     let camera_entity = active.camera?;
     let (mut projection, grid_link) = cameras.get_mut(camera_entity)?;
@@ -459,7 +446,7 @@ pub(crate) fn axis_view_keys(
     input_focus: Res<bevy::input_focus::InputFocus>,
     mut commands: Commands,
 ) {
-    if modal.active.is_some() || input_focus.0.is_some() {
+    if modal.active.is_some() || input_focus.get().is_some() {
         return;
     }
 

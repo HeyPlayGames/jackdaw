@@ -3,13 +3,13 @@ use bevy::{
     asset::{embedded_asset, load_embedded_asset},
     camera::{RenderTarget, visibility::RenderLayers},
     core_pipeline::oit::OrderIndependentTransparencySettings,
+    dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridPlugin},
     gizmos::{GizmoAsset, retained::Gizmo},
     image::ImageSampler,
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
     ui::{UiGlobalTransform, widget::ViewportNode},
 };
-use bevy_infinite_grid::{InfiniteGridBundle, InfiniteGridPlugin};
 use jackdaw_api::prelude::*;
 use jackdaw_api_internal::keymap::PresetInput;
 use jackdaw_camera::{JackdawCameraPlugin, JackdawCameraSettings};
@@ -18,6 +18,7 @@ use bevy::ecs::system::SystemParam;
 
 use crate::core_extension::CoreExtensionInputContext;
 use crate::selection::{Selected, Selection};
+use crate::snapping::GridSettings;
 use jackdaw_widgets::file_browser::FileBrowserItem;
 
 /// Marker for a 3D viewport camera. Once multi-viewport support
@@ -380,10 +381,14 @@ pub(crate) fn build_viewport_panel(world: &mut World, parent: Entity) {
     let camera_layers = RenderLayers::from_layers(&[0, viewport_layer]);
     let grid_layers = RenderLayers::layer(viewport_layer);
 
+    let grid_settings = world.resource::<GridSettings>().0;
     let grid = world
         .spawn((
             crate::EditorEntity,
-            InfiniteGridBundle::default(),
+            InfiniteGrid,
+            grid_settings,
+            Transform::IDENTITY,
+            Visibility::Inherited,
             grid_layers.clone(),
         ))
         .id();
@@ -717,6 +722,9 @@ fn update_active_viewport(
     let mut hovered: Option<(Entity, Entity)> = None; // (ui_node, camera)
     if let Some(cursor) = cursor {
         for (ui_entity, computed, vp_transform, vp_node) in &viewports {
+            let Some(camera) = vp_node.camera else {
+                continue;
+            };
             let scale = computed.inverse_scale_factor();
             let vp_pos = vp_transform.translation * scale;
             let vp_size = computed.size() * scale;
@@ -727,7 +735,7 @@ fn update_active_viewport(
                 && cursor.y >= top_left.y
                 && cursor.y <= bottom_right.y
             {
-                hovered = Some((ui_entity, vp_node.camera));
+                hovered = Some((ui_entity, camera));
                 break;
             }
         }
@@ -746,7 +754,7 @@ fn update_active_viewport(
     }
 
     let modal_active = modal.active.is_some();
-    let text_focused = input_focus.0.is_some();
+    let text_focused = input_focus.get().is_some();
     let overlay_blocking = !blockers.is_empty();
     let inputs_clear = !modal_active && !text_focused && !overlay_blocking;
 

@@ -1,8 +1,8 @@
 use bevy::{
+    dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridSettings},
     input::mouse::{MouseScrollUnit, MouseWheel},
     prelude::*,
 };
-use bevy_infinite_grid::{InfiniteGrid, InfiniteGridSettings};
 use jackdaw_api::op::{Operator, OperatorCommandsExt as _};
 
 use crate::default_style;
@@ -26,35 +26,29 @@ impl Plugin for SnappingPlugin {
     }
 }
 
-#[derive(Resource)]
-pub struct GridSettings {
-    pub visible: bool,
-    pub scale: f32,
-    pub major_line_color: Color,
-    pub minor_line_color: Color,
-    pub x_axis_color: Color,
-    pub z_axis_color: Color,
-    pub fadeout_distance: f32,
-}
+/// Editor-wide infinite grid appearance. Wraps [`InfiniteGridSettings`] so
+/// the same value can be stored as a resource and copied onto grid entities.
+#[derive(Resource, Clone, Copy, Deref, DerefMut)]
+pub struct GridSettings(pub InfiniteGridSettings);
 
 impl Default for GridSettings {
     fn default() -> Self {
-        Self {
-            visible: true,
+        Self(InfiniteGridSettings {
             scale: 4.0,
             major_line_color: default_style::GRID_MAJOR_LINE,
             minor_line_color: default_style::GRID_MINOR_LINE,
             x_axis_color: default_style::AXIS_X,
             z_axis_color: default_style::AXIS_Z,
             fadeout_distance: 100.0,
-        }
+            ..Default::default()
+        })
     }
 }
 
-fn sync_grid_settings(
+pub(crate) fn sync_grid_settings(
     snap: Res<SnapSettings>,
     mut grid: ResMut<GridSettings>,
-    mut grids: Query<(&mut InfiniteGridSettings, &mut Visibility), With<InfiniteGrid>>,
+    mut grids: Query<&mut InfiniteGridSettings, With<InfiniteGrid>>,
 ) {
     // Sync grid scale from snap settings whenever snap changes.
     // InfiniteGrid scale is lines-per-unit (density), so use the reciprocal of cell size.
@@ -64,18 +58,8 @@ fn sync_grid_settings(
     if !grid.is_changed() {
         return;
     }
-    for (mut settings, mut visibility) in &mut grids {
-        settings.scale = grid.scale;
-        settings.major_line_color = grid.major_line_color;
-        settings.minor_line_color = grid.minor_line_color;
-        settings.x_axis_color = grid.x_axis_color;
-        settings.z_axis_color = grid.z_axis_color;
-        settings.fadeout_distance = grid.fadeout_distance;
-        *visibility = if grid.visible {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
+    for mut settings in &mut grids {
+        *settings = grid.0;
     }
 }
 
