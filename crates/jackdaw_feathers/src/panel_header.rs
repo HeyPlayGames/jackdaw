@@ -181,7 +181,7 @@ fn setup_panel_tab_bars(
                     .spawn((
                         Text::new(String::from(glyph.unicode())),
                         TextFont {
-                            font: font_handle,
+                            font: font_handle.into(),
                             font_size: tokens::ICON_SM,
                             ..Default::default()
                         },
@@ -242,7 +242,7 @@ fn setup_panel_tab_bars(
                     children![(
                         Text::new(String::from(Icon::Plus.unicode())),
                         TextFont {
-                            font: font_handle.clone(),
+                            font: font_handle.clone().into(),
                             font_size: tokens::ICON_SM,
                             ..Default::default()
                         },
@@ -265,7 +265,7 @@ fn setup_panel_tab_bars(
                         children![(
                             Text::new(String::from(Icon::GripVertical.unicode())),
                             TextFont {
-                                font: font_handle.clone(),
+                                font: font_handle.clone().into(),
                                 font_size: tokens::ICON_SM,
                                 ..Default::default()
                             },

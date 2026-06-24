@@ -131,8 +131,8 @@ pub fn spawn_inspector_card(
         commands.spawn((
             Text::new(String::from(Icon::ChevronDown.unicode())),
             TextFont {
-                font: font.clone(),
-                font_size: tokens::FONT_SM,
+                font: font.clone().into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -144,7 +144,7 @@ pub fn spawn_inspector_card(
         commands.spawn((
             Text::new(String::from(header_icon.unicode())),
             TextFont {
-                font: font.clone(),
+                font: font.clone().into(),
                 font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
@@ -156,7 +156,7 @@ pub fn spawn_inspector_card(
     commands.spawn((
         Text::new(title.to_string()),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_DISPLAY_COLOR.into()),
@@ -195,8 +195,8 @@ pub fn spawn_inspector_card(
             .spawn((
                 Text::new(String::from(Icon::X.unicode())),
                 TextFont {
-                    font: font.clone(),
-                    font_size: tokens::FONT_SM,
+                    font: font.clone().into(),
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -238,7 +238,7 @@ pub fn spawn_inspector_field_row(commands: &mut Commands, body: Entity, label: &
     commands.spawn((
         Text::new(label.to_string()),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),

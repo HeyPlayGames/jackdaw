@@ -91,7 +91,7 @@ pub fn spawn_icon_sidebar_world(
         };
 
         if let Some(icon_font_res) = world.get_resource::<crate::IconFontHandle>() {
-            text_font.font = icon_font_res.0.clone();
+            text_font.font = icon_font_res.0.clone().into();
         }
 
         world.spawn((

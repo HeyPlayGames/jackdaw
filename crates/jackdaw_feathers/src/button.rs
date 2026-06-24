@@ -274,10 +274,10 @@ impl ButtonSize {
             Self::Icon | Self::IconSM => px(0.0),
         }
     }
-    pub fn icon_size(&self) -> f32 {
+    pub fn icon_size(&self) -> FontSize {
         match self {
-            Self::IconSM => 14.0,
-            Self::Icon | Self::MD => 16.0,
+            Self::IconSM => FontSize::Px(14.0),
+            Self::Icon | Self::MD => FontSize::Px(16.0),
         }
     }
 }
@@ -560,7 +560,7 @@ fn setup_button(
                     parent.spawn((
                         Text::new(icon.unicode()),
                         TextFont {
-                            font: icon_font_handle.clone(),
+                            font: icon_font_handle.clone().into(),
                             font_size: size.icon_size(),
                             ..default()
                         },
@@ -579,7 +579,7 @@ fn setup_button(
                         ButtonContentText,
                         Text::new(&content),
                         TextFont {
-                            font: font.clone(),
+                            font: font.clone().into(),
                             font_size: TEXT_SIZE,
                             weight: FontWeight::MEDIUM,
                             ..default()
@@ -596,7 +596,7 @@ fn setup_button(
                     parent.spawn((
                         Text::new(subtitle),
                         TextFont {
-                            font: font.clone(),
+                            font: font.clone().into(),
                             font_size: TEXT_SIZE_SM,
                             ..default()
                         },
@@ -612,7 +612,7 @@ fn setup_button(
                     parent.spawn((
                         Text::new(icon.unicode()),
                         TextFont {
-                            font: icon_font_handle.clone(),
+                            font: icon_font_handle.clone().into(),
                             font_size: size.icon_size(),
                             ..default()
                         },
@@ -650,7 +650,7 @@ fn handle_hover(
             continue;
         };
 
-        let is_hovered = hovered.get() || focus.0 == Some(entity);
+        let is_hovered = hovered.get() || focus.get() == Some(entity);
         bg.0 = variant
             .bg_color(is_hovered)
             .with_alpha(variant.bg_opacity(is_hovered))
@@ -712,7 +712,7 @@ pub fn icon_button(props: IconButtonProps, icon_font: &Handle<Font>) -> impl Bun
         children![(
             Text::new(icon.unicode()),
             TextFont {
-                font: icon_font.clone(),
+                font: icon_font.clone().into(),
                 font_size: size.icon_size(),
                 ..default()
             },

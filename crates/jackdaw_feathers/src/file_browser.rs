@@ -45,7 +45,7 @@ pub fn file_browser_item_with_icon(
             (
                 Text::new(String::from(icon.unicode())),
                 TextFont {
-                    font,
+                    font: font.into(),
                     font_size: tokens::ICON_LG,
                     ..Default::default()
                 },
@@ -55,7 +55,7 @@ pub fn file_browser_item_with_icon(
             (
                 Text::new(truncate_name(&file_name, 12)),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 ThemedText,
@@ -104,8 +104,8 @@ pub fn file_browser_list_item_with_icon(
             (
                 Text::new(String::from(icon.unicode())),
                 TextFont {
-                    font,
-                    font_size: tokens::FONT_MD,
+                    font: font.into(),
+                    font_size: tokens::TEXT_SIZE,
                     ..Default::default()
                 },
                 TextColor(icon_color),
@@ -113,7 +113,7 @@ pub fn file_browser_list_item_with_icon(
             (
                 Text::new(item.file_name.clone()),
                 TextFont {
-                    font_size: tokens::FONT_MD,
+                    font_size: tokens::TEXT_SIZE,
                     ..Default::default()
                 },
                 ThemedText,

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::color::Color;
 
 use crate::text_edit::{TextEditPrefix, TextEditProps, text_edit};
-use crate::tokens::{self, TEXT_SIZE, TEXT_SIZE_SM};
+use crate::tokens::{self, TEXT_SIZE_PX, TEXT_SIZE_SM_PX};
 
 #[derive(Component)]
 pub struct EditorVectorEdit;
@@ -34,8 +34,8 @@ impl VectorSuffixes {
 
     fn text_size(&self) -> f32 {
         match self {
-            Self::Range => TEXT_SIZE_SM,
-            _ => TEXT_SIZE,
+            Self::Range => TEXT_SIZE_SM_PX,
+            _ => TEXT_SIZE_PX,
         }
     }
 

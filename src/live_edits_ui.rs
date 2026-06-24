@@ -115,7 +115,7 @@ pub fn live_edits_badge() -> impl Bundle {
             LiveEditsBadgeLabel,
             Text::new(String::new()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(crate::default_style::LIVE_EDIT_ACCENT),
@@ -275,7 +275,7 @@ fn spawn_tray_row(
                 children![(
                     Text::new(entry.label.clone()),
                     TextFont {
-                        font_size: tokens::FONT_SM,
+                        font_size: tokens::TEXT_SIZE_SM,
                         ..Default::default()
                     },
                     TextColor(text_color),
@@ -289,7 +289,7 @@ fn spawn_tray_row(
                 children![(
                     Text::new(format!("{baseline} -> {live}")),
                     TextFont {
-                        font_size: tokens::FONT_SM,
+                        font_size: tokens::TEXT_SIZE_SM,
                         ..Default::default()
                     },
                     TextColor(if state.stale {
@@ -379,7 +379,7 @@ fn tray_entry_button(
         children![(
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(if enabled {
@@ -421,7 +421,7 @@ fn tray_footer_button(label: &'static str, operator_id: &'static str) -> impl Bu
         children![(
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -541,7 +541,7 @@ fn rebuild_stop_prompt(
         children![(
             Text::new(stop_prompt_title(log.entries.len())),
             TextFont {
-                font_size: tokens::FONT_MD,
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -571,7 +571,7 @@ fn rebuild_stop_prompt(
                     "{stale_count} entries belong to another scene tab and apply when it is active"
                 )),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -631,7 +631,7 @@ fn stop_prompt_operator_button(label: &'static str, operator_id: &'static str) -
         children![(
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -672,7 +672,7 @@ fn stop_prompt_review_button() -> impl Bundle {
         children![(
             Text::new("Review"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),

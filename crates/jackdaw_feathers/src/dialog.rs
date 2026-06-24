@@ -266,7 +266,7 @@ fn spawn_dialog(
             header.with_child((
                 Text::new(title),
                 TextFont {
-                    font: font.clone(),
+                    font: font.clone().into(),
                     font_size: TEXT_SIZE_XL,
                     weight: FontWeight::SEMIBOLD,
                     ..default()
@@ -279,7 +279,7 @@ fn spawn_dialog(
             header.with_child((
                 Text::new(desc),
                 TextFont {
-                    font: font.clone(),
+                    font: font.clone().into(),
                     font_size: TEXT_SIZE_LG,
                     ..default()
                 },

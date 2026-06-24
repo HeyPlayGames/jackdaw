@@ -199,7 +199,7 @@ fn tree_row_content(
                 TreeRowLabel,
                 Text::new(label),
                 TextFont {
-                    font_size: tokens::FONT_MD,
+                    font_size: tokens::TEXT_SIZE,
                     ..default()
                 },
                 Node {
@@ -336,8 +336,8 @@ fn expand_toggle(has_children: bool, icon_font: &Handle<Font>) -> impl Bundle {
         children![(
             Text::new(text),
             TextFont {
-                font,
-                font_size: tokens::FONT_SM,
+                font: font.into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -384,8 +384,8 @@ fn visibility_toggle(source: Entity, icon_font: &Handle<Font>) -> impl Bundle {
         children![(
             Text::new(String::from(Icon::Eye.unicode())),
             TextFont {
-                font: icon_font.clone(),
-                font_size: tokens::FONT_SM,
+                font: icon_font.clone().into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..default()
             },
             TextColor(tokens::TEXT_SECONDARY.with_alpha(0.4)),
@@ -466,8 +466,8 @@ fn category_dot(
         children![(
             Text::new(String::from(icon_char.unicode())),
             TextFont {
-                font: icon_font.clone(),
-                font_size: 12.0,
+                font: icon_font.clone().into(),
+                font_size: tokens::TEXT_SIZE,
                 ..default()
             },
             TextColor(color),
@@ -559,7 +559,7 @@ pub fn tree_keyboard_navigation(
 ) {
     // Skip tree keyboard navigation when a text input is focused
     // to avoid Enter/arrow keys interfering with text editing.
-    if input_focus.0.is_some() {
+    if input_focus.get().is_some() {
         return;
     }
     // Collect all visible tree rows in order

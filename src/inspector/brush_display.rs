@@ -66,7 +66,7 @@ pub(super) fn spawn_brush_display(
     commands.spawn((
         Text::new(info),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -77,7 +77,7 @@ pub(super) fn spawn_brush_display(
     commands.spawn((
         Text::new("Topology"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -94,7 +94,7 @@ pub(super) fn spawn_brush_display(
         commands.spawn((
             Text::new("Empty (legacy brush; will populate after migration)"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_DISABLED),
@@ -123,7 +123,7 @@ pub(super) fn spawn_brush_display(
             commands.spawn((
                 Text::new(*label),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -137,7 +137,7 @@ pub(super) fn spawn_brush_display(
             commands.spawn((
                 Text::new(count.to_string()),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_PRIMARY),
@@ -189,7 +189,7 @@ fn spawn_material_summary(
     commands.spawn((
         Text::new("Materials & Textures"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -242,7 +242,7 @@ fn spawn_material_summary(
         commands.spawn((
             Text::new(mat_label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(if is_default {
@@ -266,7 +266,7 @@ fn spawn_material_summary(
         commands.spawn((
             Text::new(count_text),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -297,7 +297,7 @@ fn spawn_material_summary(
         commands.spawn((
             Text::new("Clear All"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -429,7 +429,7 @@ pub(crate) fn update_brush_face_properties(
     commands.spawn((
         Text::new(header_text),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -477,7 +477,7 @@ pub(crate) fn update_brush_face_properties(
         commands.spawn((
             Text::new(mat_label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -507,7 +507,7 @@ pub(crate) fn update_brush_face_properties(
         commands.spawn((
             Text::new("Clear"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -551,7 +551,7 @@ pub(crate) fn update_brush_face_properties(
         commands.spawn((
             Text::new("Apply to All Faces"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -580,7 +580,7 @@ pub(crate) fn update_brush_face_properties(
         commands.spawn((
             Text::new("No Material"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -649,7 +649,7 @@ pub(crate) fn update_brush_face_properties(
         commands.spawn((
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -696,7 +696,7 @@ pub(crate) fn update_brush_face_properties(
     commands.spawn((
         Text::new("Rotation"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -749,7 +749,7 @@ fn spawn_brush_face_field_row(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),

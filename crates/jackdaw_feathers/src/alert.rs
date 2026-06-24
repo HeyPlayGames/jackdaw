@@ -98,7 +98,7 @@ fn setup_alert(
             .spawn((
                 Text::new(first_text),
                 TextFont {
-                    font: font.clone(),
+                    font: font.clone().into(),
                     font_size: TEXT_SIZE,
                     weight: first_weight,
                     ..default()
@@ -113,7 +113,7 @@ fn setup_alert(
                 .spawn((
                     TextSpan::new(text),
                     TextFont {
-                        font: font.clone(),
+                        font: font.clone().into(),
                         font_size: TEXT_SIZE,
                         weight,
                         ..default()

@@ -245,7 +245,7 @@ fn spawn_menu_bar_item(
         children![(
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_MD,
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             ThemedText,

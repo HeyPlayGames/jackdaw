@@ -155,8 +155,8 @@ pub(crate) fn build_inspector_displays(
                     "{selection_count} entities selected, edits apply to all"
                 )),
                 TextFont {
-                    font: editor_font.0.clone(),
-                    font_size: tokens::FONT_SM,
+                    font: editor_font.0.clone().into(),
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_PRIMARY),
@@ -467,7 +467,7 @@ pub(crate) fn build_inspector_displays(
                         commands.spawn((
                             Text::new("Status: non-convex (collider forced to TriMesh)"),
                             TextFont {
-                                font_size: tokens::FONT_SM,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..Default::default()
                             },
                             TextColor(tokens::TEXT_DISABLED),
@@ -510,7 +510,7 @@ pub(crate) fn build_inspector_displays(
         commands.spawn((
             LocalizedText::new("read-only"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -834,8 +834,8 @@ pub(crate) fn spawn_component_display(
     commands.spawn((
         Text::new(String::from(Icon::ChevronDown.unicode())),
         TextFont {
-            font: font.clone(),
-            font_size: tokens::FONT_SM,
+            font: font.clone().into(),
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -846,7 +846,7 @@ pub(crate) fn spawn_component_display(
     commands.spawn((
         Text::new(String::from(Icon::Move3d.unicode())),
         TextFont {
-            font: font.clone(),
+            font: font.clone().into(),
             font_size: tokens::TEXT_SIZE,
             ..Default::default()
         },
@@ -863,8 +863,8 @@ pub(crate) fn spawn_component_display(
     commands.spawn((
         Text::new(name.to_string()),
         TextFont {
-            font: body_font,
-            font_size: tokens::FONT_SM,
+            font: body_font.clone().into(),
+            font_size: tokens::TEXT_SIZE_SM,
             weight: FontWeight::MEDIUM,
             ..Default::default()
         },
@@ -899,8 +899,8 @@ pub(crate) fn spawn_component_display(
                 commands.spawn((
                     Text::new(String::from(Icon::RotateCcw.unicode())),
                     TextFont {
-                        font: font.clone(),
-                        font_size: tokens::FONT_SM,
+                        font: font.clone().into(),
+                        font_size: tokens::TEXT_SIZE_SM,
                         ..Default::default()
                     },
                     TextColor(default_style::INSPECTOR_OVERRIDE),
@@ -933,8 +933,8 @@ pub(crate) fn spawn_component_display(
                 commands.spawn((
                     Text::new(String::from(Icon::RotateCcw.unicode())),
                     TextFont {
-                        font: font.clone(),
-                        font_size: tokens::FONT_SM,
+                        font: font.clone().into(),
+                        font_size: tokens::TEXT_SIZE_SM,
                         ..Default::default()
                     },
                     TextColor(default_style::INSPECTOR_OVERRIDE),
@@ -963,8 +963,8 @@ pub(crate) fn spawn_component_display(
         commands.spawn((
             Text::new(String::from(Icon::X.unicode())),
             TextFont {
-                font: font.clone(),
-                font_size: tokens::FONT_SM,
+                font: font.clone().into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),

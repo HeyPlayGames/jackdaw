@@ -126,7 +126,7 @@ pub fn remote_debug_workspace_content() -> impl Bundle {
                 RemoteEntityStatusText,
                 Text::new("Not connected"),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),

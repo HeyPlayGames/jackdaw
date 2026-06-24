@@ -296,10 +296,10 @@ fn load_role_image(
     if role.is_srgb() {
         asset_server.load::<Image>(asset_path)
     } else {
-        asset_server.load_with_settings::<Image, ImageLoaderSettings>(
-            asset_path,
-            |s: &mut ImageLoaderSettings| s.is_srgb = false,
-        )
+        asset_server
+            .load_builder()
+            .with_settings(|s: &mut ImageLoaderSettings| s.is_srgb = false)
+            .load::<Image>(asset_path)
     }
 }
 
@@ -784,7 +784,7 @@ fn update_preview_area(
         PreviewAreaLabel,
         Text::new(active_name),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -818,7 +818,7 @@ fn update_preview_area(
     commands.spawn((
         Text::new("Apply"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -856,7 +856,7 @@ fn update_preview_area(
     commands.spawn((
         Text::new("Textures"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -889,7 +889,7 @@ fn update_preview_area(
         commands.spawn((
             Text::new(slot.label()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -940,7 +940,7 @@ fn update_preview_area(
         commands.spawn((
             Text::new(path_text),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(path_color),
@@ -962,7 +962,7 @@ fn update_preview_area(
                 },
                 icons::icon_colored(
                     icons::Icon::FolderOpen,
-                    tokens::FONT_SM,
+                    tokens::TEXT_SIZE_SM_PX,
                     icon_font.clone(),
                     tokens::TEXT_SECONDARY,
                 ),
@@ -991,7 +991,7 @@ fn update_preview_area(
                     },
                     icons::icon_colored(
                         icons::Icon::X,
-                        tokens::FONT_SM,
+                        tokens::TEXT_SIZE_SM_PX,
                         icon_font.clone(),
                         tokens::TEXT_SECONDARY,
                     ),
@@ -1013,7 +1013,7 @@ fn update_preview_area(
     commands.spawn((
         Text::new("Parameters"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -1049,7 +1049,7 @@ fn update_preview_area(
         commands.spawn((
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -1155,7 +1155,7 @@ fn on_material_param_commit(
     };
     let value: f32 = event.text.parse().unwrap_or(0.0);
 
-    let Some(mat) = materials.get_mut(active_handle) else {
+    let Some(mut mat) = materials.get_mut(active_handle) else {
         return;
     };
     match param {
@@ -1257,15 +1257,15 @@ fn poll_texture_slot_pick(world: &mut World) {
     let image_handle = if slot.is_srgb() {
         asset_server.load::<Image>(asset_path)
     } else {
-        asset_server.load_with_settings::<Image, ImageLoaderSettings>(
-            asset_path,
-            |s: &mut ImageLoaderSettings| s.is_srgb = false,
-        )
+        asset_server
+            .load_builder()
+            .with_settings(|s: &mut ImageLoaderSettings| s.is_srgb = false)
+            .load::<Image>(asset_path)
     };
 
     let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
-    if let Some(mat) = materials.get_mut(&material_handle) {
-        slot.set_on(mat, Some(image_handle));
+    if let Some(mut mat) = materials.get_mut(&material_handle) {
+        slot.set_on(&mut mat, Some(image_handle));
     }
 
     world
@@ -1280,8 +1280,8 @@ fn handle_clear_texture_slot(
     mut catalog: ResMut<crate::asset_catalog::AssetCatalog>,
     mut preview_state: ResMut<MaterialPreviewState>,
 ) {
-    if let Some(mat) = materials.get_mut(&event.material_handle) {
-        event.slot.set_on(mat, None);
+    if let Some(mut mat) = materials.get_mut(&event.material_handle) {
+        event.slot.set_on(&mut mat, None);
     }
     catalog.dirty = true;
     preview_state.set_changed();
@@ -1393,7 +1393,7 @@ fn update_material_browser_ui(
         let mut name_label = commands.spawn((
             Text::new(display_name),
             TextFont {
-                font_size: tokens::FONT_XS,
+                font_size: tokens::TEXT_SIZE_XS,
                 ..default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -1480,7 +1480,7 @@ pub fn material_browser_panel(icon_font: Handle<Font>) -> impl Bundle {
                             (
                                 Text::new("Materials"),
                                 TextFont {
-                                    font_size: tokens::FONT_MD,
+                                    font_size: tokens::TEXT_SIZE,
                                     ..Default::default()
                                 },
                                 ThemedText,
@@ -1493,7 +1493,7 @@ pub fn material_browser_panel(icon_font: Handle<Font>) -> impl Bundle {
                                 },
                                 Text::default(),
                                 TextFont {
-                                    font_size: tokens::FONT_SM,
+                                    font_size: tokens::TEXT_SIZE_SM,
                                     ..Default::default()
                                 },
                                 TextColor(tokens::TEXT_SECONDARY),

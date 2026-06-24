@@ -139,7 +139,7 @@ fn spawn_menu(world: &mut World, right_x: f32, top_y: f32) -> Entity {
 /// drop the `#1` suffix in the label; the key always carries the index.
 fn collect_rows(world: &mut World) -> Vec<RowSpec> {
     let runs = world.resource::<RunConfigs>().manifest.runs.clone();
-    let session = world.non_send_resource::<PieSession>();
+    let session = world.non_send::<PieSession>();
 
     let mut rows = Vec::new();
     for run in &runs {
@@ -199,11 +199,11 @@ fn spawn_instance_row(
     spawn_check_slot(world, row, spec.running, icon_font);
 
     let mut label_font = TextFont {
-        font_size: tokens::FONT_SM,
+        font_size: tokens::TEXT_SIZE_SM,
         ..Default::default()
     };
     if let Some(handle) = editor_font {
-        label_font.font = handle;
+        label_font.font = handle.into();
     }
     world.spawn((
         Text::new(spec.label),
@@ -239,8 +239,8 @@ fn spawn_check_slot(
         world.spawn((
             Text::new(String::from(Icon::Check.unicode())),
             TextFont {
-                font: handle,
-                font_size: 12.0,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(tokens::DOC_TAB_ACTIVE_LABEL),
@@ -278,8 +278,8 @@ fn spawn_scaffold_row(
         world.spawn((
             Text::new(String::from(Icon::FilePlus.unicode())),
             TextFont {
-                font: handle,
-                font_size: 12.0,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(tokens::DOC_TAB_INACTIVE_LABEL),
@@ -289,11 +289,11 @@ fn spawn_scaffold_row(
     }
 
     let mut label_font = TextFont {
-        font_size: tokens::FONT_SM,
+        font_size: tokens::TEXT_SIZE_SM,
         ..Default::default()
     };
     if let Some(handle) = editor_font {
-        label_font.font = handle;
+        label_font.font = handle.into();
     }
     world.spawn((
         Text::new("Generate jackdaw.toml".to_string()),
@@ -320,7 +320,7 @@ fn on_instance_row_click(
 
     let key = rows.get(row)?.0.clone();
     commands.queue(move |world: &mut World| {
-        if world.non_send_resource::<PieSession>().is_running(&key) {
+        if world.non_send::<PieSession>().is_running(&key) {
             stop_instance(world, &key);
         } else if let Some(run) = world
             .resource::<RunConfigs>()

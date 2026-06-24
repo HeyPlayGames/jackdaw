@@ -116,7 +116,7 @@ pub fn spawn_tab_bar_world(
             children![(
                 Text::new(String::from(Icon::Plus.unicode())),
                 TextFont {
-                    font: font_handle.clone(),
+                    font: font_handle.clone().into(),
                     font_size: tokens::ICON_SM,
                     ..default()
                 },
@@ -138,7 +138,7 @@ pub fn spawn_tab_bar_world(
             children![(
                 Text::new(String::from(Icon::GripVertical.unicode())),
                 TextFont {
-                    font: font_handle.clone(),
+                    font: font_handle.clone().into(),
                     font_size: tokens::ICON_SM,
                     ..default()
                 },
@@ -214,7 +214,7 @@ fn spawn_tab(
 
     world.spawn((
         Text::new(label.to_string()),
-        TextLayout::new_with_linebreak(LineBreak::NoWrap),
+        TextLayout::linebreak(LineBreak::NoWrap),
         TextFont {
             font_size: tokens::TEXT_SIZE_LG,
             ..default()
@@ -248,8 +248,8 @@ fn spawn_tab(
                 DockTabCloseIcon,
                 Text::new(String::from(Icon::X.unicode())),
                 TextFont {
-                    font: font_handle,
-                    font_size: 10.0,
+                    font: font_handle.into(),
+                    font_size: jackdaw_feathers::tokens::TEXT_SIZE_XS,
                     ..default()
                 },
                 TextColor(tokens::TAB_INACTIVE_TEXT.with_alpha(0.0)),

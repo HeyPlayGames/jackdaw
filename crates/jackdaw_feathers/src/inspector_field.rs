@@ -4,7 +4,7 @@ use crate::checkbox::{CheckboxProps, checkbox};
 use crate::combobox::{ComboBoxOptionData, combobox};
 use crate::icons::EditorFont;
 use crate::text_edit::{TextEditProps, text_edit};
-use crate::tokens::TEXT_MUTED_COLOR;
+use crate::tokens::{TEXT_MUTED_COLOR, TEXT_SIZE_SM};
 use crate::vector_edit::{VectorEditProps, VectorSuffixes, vector_edit};
 
 pub fn plugin(app: &mut App) {
@@ -322,8 +322,8 @@ fn setup_combobox_fields(
                 parent.spawn((
                     Text::new(label),
                     TextFont {
-                        font: font.clone(),
-                        font_size: 11.0,
+                        font: font.clone().into(),
+                        font_size: TEXT_SIZE_SM,
                         weight: FontWeight::MEDIUM,
                         ..default()
                     },

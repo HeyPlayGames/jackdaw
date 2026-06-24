@@ -153,7 +153,7 @@ pub fn spawn_popover(
         children![(
             LocalizedText::new("add-node"),
             TextFont {
-                font_size: 12.0,
+                font_size: jackdaw_feathers::tokens::TEXT_SIZE,
                 ..default()
             },
             TextColor(Color::srgb(0.88, 0.89, 0.92)),
@@ -188,7 +188,7 @@ pub fn spawn_popover(
             children![(
                 Text::new(category.to_uppercase()),
                 TextFont {
-                    font_size: 10.0,
+                    font_size: jackdaw_feathers::tokens::TEXT_SIZE_XS,
                     ..default()
                 },
                 TextColor(HEADER_TEXT),
@@ -227,7 +227,7 @@ pub fn spawn_popover(
                     (
                         Text::new(desc.display_name.clone()),
                         TextFont {
-                            font_size: 12.0,
+                            font_size: jackdaw_feathers::tokens::TEXT_SIZE,
                             ..default()
                         },
                         TextColor(ENTRY_TEXT),

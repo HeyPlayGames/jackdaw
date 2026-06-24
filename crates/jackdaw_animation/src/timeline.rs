@@ -363,7 +363,7 @@ fn spawn_placeholder(commands: &mut Commands, parent: Entity) {
         LocalizedText::new("no-animation-clip-on-selection"),
         TextColor(tokens::TEXT_MUTED_COLOR.into()),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..default()
         },
         ChildOf(wrapper),
@@ -524,7 +524,7 @@ fn spawn_header(
         Text::new(format!("{cursor_time:.2}s")),
         TextColor(tokens::TEXT_SECONDARY),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..default()
         },
         Node {
@@ -720,7 +720,7 @@ fn spawn_ruler_ticks(commands: &mut Commands, ruler: Entity, timeline_col: Entit
                 Text::new(format!("{t:.2}s")),
                 TextColor(tokens::TEXT_MUTED_COLOR.into()),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..default()
                 },
             )],
@@ -829,7 +829,7 @@ fn spawn_track_label(
         Text::new(track.field_path.clone()),
         TextColor(tokens::TEXT_TERTIARY),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..default()
         },
         Node {

@@ -49,8 +49,8 @@ pub(super) fn spawn_custom_properties_display(
         commands.spawn((
             Text::new(format!("{}:", prop_name)),
             TextFont {
-                font: editor_font.clone(),
-                font_size: tokens::FONT_SM,
+                font: editor_font.clone().into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             Node {
@@ -253,8 +253,8 @@ pub(super) fn spawn_custom_properties_display(
         commands.spawn((
             Text::new(String::from(Icon::X.unicode())),
             TextFont {
-                font: icon_font.clone(),
-                font_size: tokens::FONT_SM,
+                font: icon_font.clone().into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -296,7 +296,7 @@ fn spawn_custom_axis(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(label_color),
@@ -373,8 +373,8 @@ fn spawn_add_property_row(
     commands.spawn((
         Text::new(String::from(Icon::Plus.unicode())),
         TextFont {
-            font,
-            font_size: tokens::FONT_SM,
+            font: font.into(),
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_ACCENT),
@@ -399,7 +399,9 @@ fn add_custom_property_from_ui(
 ) {
     // Read the name input value
     let name = {
-        let input = *text_edit.get(world);
+        let Ok(input) = text_edit.get(world).map(Single::into_inner) else {
+            return;
+        };
         let name = input.0.trim().to_string();
         if name.is_empty() {
             return;
@@ -409,7 +411,9 @@ fn add_custom_property_from_ui(
 
     // Read the type selector
     let type_name = {
-        let index = *combo_box_index.get(world);
+        let Ok(index) = combo_box_index.get(world).map(Single::into_inner) else {
+            return;
+        };
         let all_types = PropertyValue::all_type_names();
         let idx = index.0.min(all_types.len().saturating_sub(1));
         all_types[idx].to_string()

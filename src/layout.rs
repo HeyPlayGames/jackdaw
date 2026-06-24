@@ -333,8 +333,8 @@ fn pie_menu_button(icon_font: Handle<Font>) -> impl Bundle {
         children![(
             Text::new(String::from(Icon::ChevronDown.unicode())),
             TextFont {
-                font: icon_font,
-                font_size: 10.0,
+                font: icon_font.into(),
+                font_size: tokens::TEXT_SIZE_XS,
                 ..Default::default()
             },
             TextColor(tokens::HEADER_CONTROL_LABEL),
@@ -365,8 +365,8 @@ fn pie_transport_button(
         children![(
             Text::new(String::from(icon.unicode())),
             TextFont {
-                font: icon_font,
-                font_size: 13.0,
+                font: icon_font.into(),
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(tokens::HEADER_CONTROL_LABEL),
@@ -527,7 +527,7 @@ fn grid_size_label() -> impl Bundle {
         GridSizeLabel,
         Text::new("1"),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -563,8 +563,8 @@ pub fn update_grid_size_label(
         if label.0 != text {
             label.0 = text.clone();
         }
-        if font.font != editor_font.0 {
-            font.font = editor_font.0.clone();
+        if font.font != editor_font.0.clone().into() {
+            font.font = editor_font.0.clone().into();
         }
     }
 }
@@ -656,8 +656,8 @@ pub fn hierarchy_content(icon_font: Handle<Font>) -> impl Bundle {
                         children![(
                             Text::new(String::from(Icon::Eye.unicode())),
                             TextFont {
-                                font: icon_font,
-                                font_size: 14.0,
+                                font: icon_font.into(),
+                                font_size: tokens::TEXT_SIZE,
                                 ..Default::default()
                             },
                             TextColor(tokens::TEXT_SECONDARY),
@@ -706,7 +706,7 @@ pub fn hierarchy_content(icon_font: Handle<Font>) -> impl Bundle {
                     (
                         Text::new(String::from(Icon::PackagePlus.unicode())),
                         TextFont {
-                            font: add_entity_icon_font,
+                            font: add_entity_icon_font.into(),
                             font_size: tokens::ICON_SM,
                             ..Default::default()
                         },
@@ -741,11 +741,11 @@ pub fn hierarchy_content(icon_font: Handle<Font>) -> impl Bundle {
                 crate::status_bar::SceneStatsText,
                 Text::default(),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
-                TextLayout::new_with_justify(Justify::Center),
+                TextLayout::justify(Justify::Center),
                 Node {
                     padding: UiRect::all(px(tokens::SPACING_XS)),
                     flex_shrink: 0.0,
@@ -935,7 +935,7 @@ fn editor_status_bar() -> impl Bundle {
                 status_bar::StatusBarLeft,
                 LocalizedText::new("ready"),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 bevy::feathers::theme::ThemedText,
@@ -944,7 +944,7 @@ fn editor_status_bar() -> impl Bundle {
                 status_bar::StatusBarCenter,
                 Text::default(),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -962,7 +962,7 @@ fn editor_status_bar() -> impl Bundle {
                         status_bar::StatusBarRight,
                         Text::default(),
                         TextFont {
-                            font_size: tokens::FONT_SM,
+                            font_size: tokens::TEXT_SIZE_SM,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_SECONDARY),
@@ -1109,7 +1109,7 @@ fn save_to_scene_button(icon_font: Handle<Font>) -> impl Bundle {
             (
                 Text::new(String::from(Icon::Save.unicode())),
                 TextFont {
-                    font: icon_font,
+                    font: icon_font.into(),
                     font_size: tokens::ICON_SM,
                     ..Default::default()
                 },
@@ -1262,7 +1262,7 @@ fn pie_view_segment(
             (
                 Text::new(label),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -1273,8 +1273,8 @@ fn pie_view_segment(
                 PieViewLiveDot,
                 Text::new(String::from(Icon::Radio.unicode())),
                 TextFont {
-                    font: icon_font,
-                    font_size: 9.0,
+                    font: icon_font.into(),
+                    font_size: tokens::TEXT_SIZE_XS,
                     ..Default::default()
                 },
                 TextColor(tokens::CATEGORY_SCENE),
@@ -1415,7 +1415,7 @@ fn live_badge() -> impl Bundle {
         children![(
             Text::new("LIVE"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(crate::default_style::LIVE_ACCENT),
@@ -1497,7 +1497,7 @@ fn pie_instance_cycle_button() -> impl Bundle {
             PieFocusedInstanceLabel,
             Text::new(String::new()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -1624,7 +1624,7 @@ fn window_mode_button() -> impl Bundle {
             WindowModeLabel,
             Text::new(String::new()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),

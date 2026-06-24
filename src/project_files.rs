@@ -405,7 +405,7 @@ fn spawn_file_tree_row(
                 TreeNodeExpandToggle,
                 Text::new(String::from(Icon::ChevronRight.unicode())),
                 TextFont {
-                    font: icon_font.clone(),
+                    font: icon_font.clone().into(),
                     font_size: tokens::ICON_SM,
                     ..Default::default()
                 },
@@ -507,7 +507,7 @@ fn spawn_file_tree_row(
         commands.spawn((
             Text::new(String::from(icon.unicode())),
             TextFont {
-                font: icon_font.clone(),
+                font: icon_font.clone().into(),
                 font_size: tokens::ICON_SM,
                 ..Default::default()
             },

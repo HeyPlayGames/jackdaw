@@ -123,7 +123,7 @@ fn on_add_button_click(
             children![(
                 Text::new(name.clone()),
                 TextFont {
-                    font_size: 11.0,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..default()
                 },
                 TextColor(tokens::TEXT_PRIMARY),

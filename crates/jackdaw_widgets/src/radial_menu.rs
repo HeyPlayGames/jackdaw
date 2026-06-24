@@ -1,5 +1,6 @@
 use bevy::math::Vec2;
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
 use bevy_enhanced_input::prelude::{Press, *};
 use lucide_icons::Icon;
@@ -167,10 +168,10 @@ pub fn open_radial_menu(commands: &mut Commands, anchor: Vec2, items: Vec<Radial
             world.spawn((
                 Text::new(item.label.clone()),
                 TextFont {
-                    font_size: LABEL_FONT_SIZE,
+                    font_size: FontSize::Px(LABEL_FONT_SIZE),
                     ..Default::default()
                 },
-                TextLayout::new_with_justify(Justify::Center),
+                TextLayout::justify(Justify::Center),
                 ChildOf(wedge),
             ));
 
@@ -179,8 +180,8 @@ pub fn open_radial_menu(commands: &mut Commands, anchor: Vec2, items: Vec<Radial
                 world.spawn((
                     Text::new(String::from(icon.unicode())),
                     TextFont {
-                        font: handle.clone(),
-                        font_size: ICON_FONT_SIZE,
+                        font: handle.clone().into(),
+                        font_size: FontSize::Px(ICON_FONT_SIZE),
                         ..Default::default()
                     },
                     ChildOf(wedge),
@@ -261,8 +262,7 @@ impl Plugin for RadialMenuPlugin {
         // Load the Lucide icon font eagerly so wedge spawns never race the asset loader.
         let handle = {
             let mut fonts = app.world_mut().resource_mut::<Assets<Font>>();
-            let font = Font::try_from_bytes(lucide_icons::LUCIDE_FONT_BYTES.to_vec())
-                .expect("load lucide icon font");
+            let font = Font::from_bytes(lucide_icons::LUCIDE_FONT_BYTES.to_vec());
             fonts.add(font)
         };
         app.insert_resource(RadialIconFont(handle));

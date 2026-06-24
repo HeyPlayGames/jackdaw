@@ -87,8 +87,8 @@ pub fn workspace_dropdown_trigger(
                 WorkspaceDropdownTriggerLabel,
                 Text::default(),
                 TextFont {
-                    font: editor_font,
-                    font_size: tokens::FONT_SM,
+                    font: editor_font.into(),
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_PRIMARY),
@@ -104,8 +104,8 @@ pub fn workspace_dropdown_trigger(
             (
                 Text::new(String::from(Icon::ChevronDown.unicode())),
                 TextFont {
-                    font: icon_font,
-                    font_size: 10.0,
+                    font: icon_font.into(),
+                    font_size: tokens::TEXT_SIZE_XS,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -290,8 +290,8 @@ fn spawn_popover_row(
         world.spawn((
             Text::new(glyph.to_string()),
             TextFont {
-                font: handle,
-                font_size: 12.0,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(label_color),
@@ -301,11 +301,11 @@ fn spawn_popover_row(
     }
 
     let mut label_font = TextFont {
-        font_size: tokens::FONT_SM,
+        font_size: tokens::TEXT_SIZE_SM,
         ..Default::default()
     };
     if let Some(handle) = editor_font {
-        label_font.font = handle;
+        label_font.font = handle.into();
     }
     world.spawn((
         WorkspaceTabLabel {
@@ -360,8 +360,8 @@ fn spawn_popover_add_row(
         world.spawn((
             Text::new(String::from(Icon::Plus.unicode())),
             TextFont {
-                font: handle,
-                font_size: 12.0,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(tokens::DOC_TAB_INACTIVE_LABEL),
@@ -371,11 +371,11 @@ fn spawn_popover_add_row(
     }
 
     let mut label_font = TextFont {
-        font_size: tokens::FONT_SM,
+        font_size: tokens::TEXT_SIZE_SM,
         ..Default::default()
     };
     if let Some(handle) = editor_font {
-        label_font.font = handle;
+        label_font.font = handle.into();
     }
     world.spawn((
         LocalizedText::new("new-workspace"),

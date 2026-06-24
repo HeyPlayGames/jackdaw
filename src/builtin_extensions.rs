@@ -9,6 +9,7 @@ use jackdaw_api::{
     prelude::{ExtensionContext, ExtensionKind, JackdawExtension, WindowDescriptor},
 };
 use jackdaw_feathers::icons::Icon;
+use jackdaw_feathers::tokens;
 
 /// Reflect type paths of jackdaw's authorable world components paired with
 /// their outliner icon, in priority order. Type paths use each type's
@@ -85,7 +86,7 @@ impl JackdawExtension for CoreWindowsExtension {
                         children![(
                             Text::new("Import"),
                             TextFont {
-                                font_size: 11.0,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..default()
                             },
                             TextColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
@@ -281,7 +282,7 @@ impl JackdawExtension for TerminalExtension {
                         children![(
                             Text::new("Terminal window (not implemented yet)"),
                             TextFont {
-                                font_size: 11.0,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..default()
                             },
                             TextColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
@@ -360,7 +361,7 @@ impl JackdawExtension for InspectorExtension {
                         children![(
                             Text::new("Resources"),
                             TextFont {
-                                font_size: 11.0,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..default()
                             },
                             TextColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),
@@ -385,7 +386,7 @@ impl JackdawExtension for InspectorExtension {
                         children![(
                             Text::new("Systems"),
                             TextFont {
-                                font_size: 11.0,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..default()
                             },
                             TextColor(Color::srgba(1.0, 1.0, 1.0, 0.3)),

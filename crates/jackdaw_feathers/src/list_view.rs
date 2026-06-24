@@ -33,7 +33,7 @@ pub fn list_item(index: usize) -> impl Bundle {
             (
                 Text::new(format!("[{index}]")),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),

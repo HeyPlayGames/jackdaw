@@ -441,8 +441,8 @@ pub fn update_loop_cut_mid_label(
             crate::NonSerializable,
             Text::new("MID"),
             TextFont {
-                font: editor_font.0.clone(),
-                font_size: jackdaw_feathers::tokens::FONT_SM,
+                font: editor_font.0.clone().into(),
+                font_size: jackdaw_feathers::tokens::TEXT_SIZE_SM,
                 ..default()
             },
             TextColor(jackdaw_feathers::tokens::TEXT_ACCENT),
@@ -475,7 +475,7 @@ pub fn update_loop_cut_mid_label(
     } else {
         *vis = Visibility::Hidden;
     }
-    if font.font != editor_font.0 {
-        font.font = editor_font.0.clone();
+    if font.font != editor_font.0.clone().into() {
+        font.font = editor_font.0.clone().into();
     }
 }

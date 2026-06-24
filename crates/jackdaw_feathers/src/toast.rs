@@ -6,7 +6,7 @@ use lucide_icons::Icon;
 
 use crate::button::{ButtonClickEvent, ButtonVariant, IconButtonProps, icon_button};
 use crate::separator::{SeparatorProps, separator};
-use crate::tokens::{CORNER_RADIUS, TEXT_BODY_COLOR, TEXT_SIZE};
+use crate::tokens::{CORNER_RADIUS, TEXT_BODY_COLOR, TEXT_SIZE, TEXT_SIZE_XL};
 
 pub const TOAST_BOTTOM_OFFSET: f32 = 12.0;
 pub const DEFAULT_TOAST_DURATION: Duration = Duration::from_millis(3000);
@@ -85,8 +85,8 @@ pub fn toast(
             (
                 Text::new(variant.icon().unicode()),
                 TextFont {
-                    font: icon_font.clone(),
-                    font_size: 18.0,
+                    font: icon_font.clone().into(),
+                    font_size: TEXT_SIZE_XL,
                     ..default()
                 },
                 TextColor(TEXT_BODY_COLOR.into()),
@@ -94,7 +94,7 @@ pub fn toast(
             (
                 Text::new(content),
                 TextFont {
-                    font: editor_font.clone(),
+                    font: editor_font.clone().into(),
                     font_size: TEXT_SIZE,
                     ..default()
                 },

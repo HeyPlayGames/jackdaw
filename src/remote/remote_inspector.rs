@@ -322,8 +322,8 @@ pub(crate) fn spawn_fallback_section(
     commands.spawn((
         Text::new(String::from(Icon::FileBraces.unicode())),
         TextFont {
-            font: icon_font.0.clone(),
-            font_size: tokens::FONT_MD,
+            font: icon_font.0.clone().into(),
+            font_size: tokens::TEXT_SIZE,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -333,8 +333,8 @@ pub(crate) fn spawn_fallback_section(
     commands.spawn((
         Text::new("Other Components (JSON)"),
         TextFont {
-            font: editor_font.0.clone(),
-            font_size: tokens::FONT_MD,
+            font: editor_font.0.clone().into(),
+            font_size: tokens::TEXT_SIZE,
             weight: FontWeight::BOLD,
             ..Default::default()
         },
@@ -387,7 +387,7 @@ pub(crate) fn spawn_fallback_section(
         commands.spawn((
             Text::new(json_text),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -405,7 +405,7 @@ fn spawn_placeholder(world: &mut World, inspector_entity: Entity, message: &str)
         ComponentDisplay,
         Text::new(message.to_string()),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),

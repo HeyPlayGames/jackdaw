@@ -232,7 +232,7 @@ fn spawn_title(commands: &mut Commands, popover: Entity, tip: &Tooltip) {
         commands.spawn((
             Text::new(tip.title.clone()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 weight: FontWeight::MEDIUM,
                 ..default()
             },
@@ -256,7 +256,7 @@ fn spawn_title(commands: &mut Commands, popover: Entity, tip: &Tooltip) {
         .with_child((
             Text::new(tip.title.clone()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 weight: FontWeight::MEDIUM,
                 ..default()
             },
@@ -266,7 +266,7 @@ fn spawn_title(commands: &mut Commands, popover: Entity, tip: &Tooltip) {
         .with_child((
             Text::new(tip.keybind.clone()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -283,7 +283,7 @@ fn spawn_body(commands: &mut Commands, popover: Entity, tip: &Tooltip) {
         commands.spawn((
             Text::new(tip.description.clone()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -295,7 +295,7 @@ fn spawn_body(commands: &mut Commands, popover: Entity, tip: &Tooltip) {
         commands.spawn((
             Text::new(tip.footer.clone()),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..default()
             },
             TextColor(tokens::TEXT_SECONDARY),

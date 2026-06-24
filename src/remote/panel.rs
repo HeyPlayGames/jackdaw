@@ -66,7 +66,7 @@ pub fn connection_indicator() -> impl Bundle {
                 ConnectionLabel,
                 Text::new("Disconnected"),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -155,7 +155,7 @@ pub fn on_connection_indicator_click(
                     col.spawn((
                         Text::new("Remote Connection"),
                         TextFont {
-                            font_size: tokens::FONT_LG,
+                            font_size: tokens::TEXT_SIZE_LG,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_PRIMARY),
@@ -172,7 +172,7 @@ pub fn on_connection_indicator_click(
                         row.spawn((
                             Text::new("Endpoint:"),
                             TextFont {
-                                font_size: tokens::FONT_SM,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..Default::default()
                             },
                             TextColor(tokens::TEXT_SECONDARY),
@@ -180,7 +180,7 @@ pub fn on_connection_indicator_click(
                         row.spawn((
                             Text::new(endpoint),
                             TextFont {
-                                font_size: tokens::FONT_SM,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..Default::default()
                             },
                             TextColor(tokens::TEXT_PRIMARY),
@@ -210,7 +210,7 @@ pub fn on_connection_indicator_click(
                         children![(
                             Text::new(button_text),
                             TextFont {
-                                font_size: tokens::FONT_SM,
+                                font_size: tokens::TEXT_SIZE_SM,
                                 ..Default::default()
                             },
                             TextColor(tokens::TEXT_PRIMARY),
@@ -249,7 +249,7 @@ pub fn on_connection_indicator_click(
                             children![(
                                 Text::new("Refresh Registry"),
                                 TextFont {
-                                    font_size: tokens::FONT_SM,
+                                    font_size: tokens::TEXT_SIZE_SM,
                                     ..Default::default()
                                 },
                                 TextColor(tokens::TEXT_PRIMARY),

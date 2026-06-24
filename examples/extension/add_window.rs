@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use jackdaw::prelude::*;
 use jackdaw_feathers::{
     button::{ButtonProps, button},
-    tokens::FONT_MD,
+    tokens::TEXT_SIZE,
 };
 
 fn main() -> AppExit {
@@ -62,12 +62,12 @@ impl JackdawExtension for WindowExampleExtension {
                             children![
                                 (
                                     Text::new("Time passed since application startup:"),
-                                    TextFont::from_font_size(FONT_MD),
+                                    TextFont::from_font_size(TEXT_SIZE),
                                 ),
                                 (
                                     ElapsedTimeLabel,
                                     Text::new("<press the button below to update>"),
-                                    TextFont::from_font_size(FONT_MD),
+                                    TextFont::from_font_size(TEXT_SIZE),
                                 ),
                             ],
                         ));

@@ -173,7 +173,7 @@ fn setup_variant_edit(
             .spawn((
                 Text::new(&label),
                 TextFont {
-                    font: font.clone(),
+                    font: font.clone().into(),
                     font_size: TEXT_SIZE_SM,
                     weight: FontWeight::MEDIUM,
                     ..default()

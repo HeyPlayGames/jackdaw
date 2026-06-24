@@ -2,7 +2,7 @@
 
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy::text::LineHeight;
+use bevy::text::{FontSize, LineHeight};
 use bevy::window::PrimaryWindow;
 
 use crate::{CaptionTheme, WindowChromeEntity, WindowChromeTheme};
@@ -116,22 +116,19 @@ fn load_windows_segoe_font(fonts: &mut Assets<Font>) -> Option<Handle<Font>> {
 
     if fluent.is_file()
         && let Ok(bytes) = std::fs::read(&fluent)
-        && let Ok(font) = Font::try_from_bytes(bytes)
     {
-        return Some(fonts.add(font));
+        return Some(fonts.add(Font::from_bytes(bytes)));
     }
     if mdl2.is_file()
         && let Ok(bytes) = std::fs::read(&mdl2)
-        && let Ok(font) = Font::try_from_bytes(bytes)
     {
-        return Some(fonts.add(font));
+        return Some(fonts.add(Font::from_bytes(bytes)));
     }
     None
 }
 
 fn load_lucide_caption_font(fonts: &mut Assets<Font>) -> CaptionFont {
-    let font = Font::try_from_bytes(CAPTION_LUCIDE_FONT_BYTES.to_vec())
-        .expect("embedded Lucide caption font should be valid");
+    let font = Font::from_bytes(CAPTION_LUCIDE_FONT_BYTES.to_vec());
     CaptionFont {
         handle: fonts.add(font),
         #[cfg(target_os = "windows")]
@@ -204,8 +201,8 @@ fn caption_button_bundle(
         children![(
             Text::new(caption_font.glyph(kind, false)),
             TextFont {
-                font: caption_font.handle.clone(),
-                font_size: glyph_size,
+                font: caption_font.handle.clone().into(),
+                font_size: FontSize::Px(glyph_size),
                 ..default()
             },
             TextColor(foreground),

@@ -29,9 +29,6 @@ const TAB_DIRTY_DOT: Color = tokens::DOC_TAB_DIRTY_DOT;
 const TAB_ACCENT: Color = tokens::DOC_TAB_SCENE_ACCENT;
 const ADD_BTN_LABEL: Color = tokens::DOC_TAB_INACTIVE_LABEL;
 
-const TAB_LABEL_FONT_PX: f32 = 12.0;
-const TAB_ICON_FONT_PX: f32 = 11.0;
-const TAB_CLOSE_ICON_PX: f32 = 10.0;
 const TAB_PAD_X: f32 = 6.0;
 const TAB_RADIUS: f32 = 4.0;
 const TAB_GAP: f32 = 4.0;
@@ -282,8 +279,8 @@ fn spawn_scene_tab(
         commands.spawn((
             Text::new(String::from(glyph.unicode())),
             TextFont {
-                font: handle,
-                font_size: TAB_ICON_FONT_PX,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(label_color),
@@ -296,11 +293,11 @@ fn spawn_scene_tab(
     // clip cleanly when the tab is squeezed rather than pushing the
     // dirty dot / close button out of the tab.
     let mut label_font = TextFont {
-        font_size: TAB_LABEL_FONT_PX,
+        font_size: tokens::TEXT_SIZE,
         ..Default::default()
     };
     if let Some(handle) = editor_font {
-        label_font.font = handle;
+        label_font.font = handle.into();
     }
     let label_container = commands
         .spawn((
@@ -322,7 +319,7 @@ fn spawn_scene_tab(
             tab: tab_entity,
             tab_natural_width: 0.0,
         },
-        TextLayout::new_with_no_wrap(),
+        TextLayout::no_wrap(),
         label_font,
         TextColor(label_color),
         Pickable::IGNORE,
@@ -376,8 +373,8 @@ fn spawn_scene_tab(
             SceneTabCloseIcon,
             Text::new(String::from(Icon::X.unicode())),
             TextFont {
-                font: handle,
-                font_size: TAB_CLOSE_ICON_PX,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE_XS,
                 ..Default::default()
             },
             TextColor(hidden),
@@ -415,8 +412,8 @@ fn spawn_add_tab_button(commands: &mut Commands, strip: Entity, icon_font: Optio
         commands.spawn((
             Text::new(String::from(Icon::Plus.unicode())),
             TextFont {
-                font: handle,
-                font_size: 12.0,
+                font: handle.into(),
+                font_size: tokens::TEXT_SIZE,
                 ..Default::default()
             },
             TextColor(ADD_BTN_LABEL),

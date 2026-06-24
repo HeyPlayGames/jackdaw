@@ -9,6 +9,8 @@
 //! ([`Display::None`]) so consumers don't have to manage visibility.
 
 use bevy::prelude::*;
+use bevy::text::FontSize;
+use jackdaw_feathers::tokens;
 
 pub struct ScrollingLogPlugin;
 
@@ -33,7 +35,7 @@ pub struct ScrollingLogProps {
     pub max_height: Val,
     pub margin: UiRect,
     pub font: Handle<Font>,
-    pub font_size: f32,
+    pub font_size: FontSize,
     pub text_color: Color,
     pub background: Color,
     /// Collapse the panel when [`ScrollingLog::content`] is empty
@@ -47,7 +49,7 @@ impl Default for ScrollingLogProps {
             max_height: Val::Px(220.0),
             margin: UiRect::all(Val::Px(5.0)),
             font: Handle::default(),
-            font_size: 12.0,
+            font_size: tokens::TEXT_SIZE_SM,
             text_color: Color::WHITE,
             background: Color::NONE,
             auto_hide_when_empty: false,
@@ -86,7 +88,7 @@ pub fn spawn(world: &mut World, parent: Entity, props: ScrollingLogProps) -> Ent
         ScrollingLogText,
         Text::new(String::new()),
         TextFont {
-            font: props.font,
+            font: props.font.into(),
             font_size: props.font_size,
             ..Default::default()
         },

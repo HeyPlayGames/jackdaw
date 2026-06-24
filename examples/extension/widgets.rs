@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use jackdaw::prelude::*;
 use jackdaw_feathers::{
     button::{ButtonProps, button},
-    tokens::FONT_MD,
+    tokens::TEXT_SIZE,
 };
 
 fn main() -> AppExit {
@@ -46,7 +46,7 @@ impl JackdawExtension for WindowExampleExtension {
                 .with_build(|window| {
                     window.spawn((
                         Text::new("Here's a label"),
-                        TextFont::from_font_size(FONT_MD),
+                        TextFont::from_font_size(TEXT_SIZE),
                     ));
                     window.spawn(button(ButtonProps::from_operator::<OnButtonPressOp>()));
                     // TODO: help me out and put widgets here <3

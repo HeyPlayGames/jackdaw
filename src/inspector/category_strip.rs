@@ -129,7 +129,7 @@ pub(super) fn spawn_category_strip(
             InspectorCategoryTabIcon,
             Text::new(String::from(cat.icon.unicode())),
             TextFont {
-                font: icon_font.clone(),
+                font: icon_font.clone().into(),
                 font_size: tokens::ICON_MD,
                 ..default()
             },

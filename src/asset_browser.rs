@@ -520,7 +520,7 @@ fn refresh_browser_on_change(
                 commands.spawn((
                     Text::new(badge_text),
                     TextFont {
-                        font_size: 8.0,
+                        font_size: tokens::TEXT_SIZE_XS,
                         ..Default::default()
                     },
                     TextColor(Color::srgb(0.8, 0.8, 0.8)),
@@ -542,7 +542,7 @@ fn refresh_browser_on_change(
             let mut name_label = commands.spawn((
                 Text::new(display_name),
                 TextFont {
-                    font_size: tokens::FONT_XS,
+                    font_size: tokens::TEXT_SIZE_XS,
                     ..default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -791,7 +791,7 @@ fn refresh_browser_on_change(
                     parent.spawn((
                         Text::new(" / "),
                         TextFont {
-                            font_size: tokens::FONT_MD,
+                            font_size: tokens::TEXT_SIZE,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_SECONDARY),
@@ -809,7 +809,7 @@ fn refresh_browser_on_change(
                             ..default()
                         },
                         TextFont {
-                            font_size: tokens::FONT_MD,
+                            font_size: tokens::TEXT_SIZE,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_TERTIARY),
@@ -834,7 +834,7 @@ fn refresh_browser_on_change(
                     parent.spawn((
                         Text::new(" / "),
                         TextFont {
-                            font_size: tokens::FONT_MD,
+                            font_size: tokens::TEXT_SIZE,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_SECONDARY),
@@ -842,7 +842,7 @@ fn refresh_browser_on_change(
                     parent.spawn((
                         Text::new(file_name),
                         TextFont {
-                            font_size: tokens::FONT_MD,
+                            font_size: tokens::TEXT_SIZE,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_PRIMARY),
@@ -1220,7 +1220,7 @@ fn update_preview_panel(
     commands.spawn((
         Text::new(file_name),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -1243,7 +1243,7 @@ fn update_preview_panel(
     commands.spawn((
         Text::new(type_text),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -1296,7 +1296,7 @@ fn update_preview_panel(
         commands.spawn((
             Text::new("<"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -1314,7 +1314,7 @@ fn update_preview_panel(
         commands.spawn((
             Text::new(layer_text),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -1338,7 +1338,7 @@ fn update_preview_panel(
         commands.spawn((
             Text::new(">"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -1377,7 +1377,7 @@ fn update_preview_panel(
         commands.spawn((
             Text::new("Apply"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_PRIMARY),
@@ -1625,8 +1625,8 @@ fn prefabs_only_chip(icon_font: Handle<Font>) -> impl Bundle {
             (
                 Text::new(String::from(icons::Icon::Package.unicode())),
                 TextFont {
-                    font: icon_font,
-                    font_size: tokens::FONT_MD,
+                    font: icon_font.into(),
+                    font_size: tokens::TEXT_SIZE,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -1634,7 +1634,7 @@ fn prefabs_only_chip(icon_font: Handle<Font>) -> impl Bundle {
             (
                 Text::new("Prefabs"),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..Default::default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),

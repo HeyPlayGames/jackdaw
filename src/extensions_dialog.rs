@@ -184,7 +184,7 @@ fn populate_extensions_dialog(
             children![(
                 Text::new("No regular extensions installed"),
                 TextFont {
-                    font_size: tokens::FONT_SM,
+                    font_size: tokens::TEXT_SIZE_SM,
                     ..default()
                 },
                 TextColor(tokens::TEXT_SECONDARY),
@@ -247,7 +247,7 @@ fn spawn_install_row(commands: &mut Commands, list: Entity) {
         InstallStatusText,
         Text::new(String::new()),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -278,7 +278,7 @@ fn spawn_section_header(commands: &mut Commands, list: Entity, label: &str) {
         ChildOf(header),
         Text::new(label.to_string()),
         TextFont {
-            font_size: tokens::FONT_SM,
+            font_size: tokens::TEXT_SIZE_SM,
             ..default()
         },
         TextColor(tokens::TEXT_SECONDARY),

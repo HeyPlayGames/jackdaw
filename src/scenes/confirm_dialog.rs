@@ -94,8 +94,8 @@ pub fn spawn_confirm_dialog(world: &mut World, tab_display_name: &str) {
     world.spawn((
         Text::new("Unsaved Changes"),
         TextFont {
-            font: editor_font.clone(),
-            font_size: tokens::FONT_LG,
+            font: editor_font.clone().into(),
+            font_size: tokens::TEXT_SIZE_LG,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -110,8 +110,8 @@ pub fn spawn_confirm_dialog(world: &mut World, tab_display_name: &str) {
     world.spawn((
         Text::new(message),
         TextFont {
-            font: editor_font.clone(),
-            font_size: tokens::FONT_SM,
+            font: editor_font.clone().into(),
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -185,8 +185,8 @@ fn spawn_dialog_button(
     world.spawn((
         Text::new(label.to_string()),
         TextFont {
-            font: editor_font,
-            font_size: tokens::FONT_MD,
+            font: editor_font.into(),
+            font_size: tokens::TEXT_SIZE,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -261,8 +261,8 @@ pub fn spawn_confirm_quit_dialog(world: &mut World) {
     world.spawn((
         Text::new("Unsaved Changes"),
         TextFont {
-            font: editor_font.clone(),
-            font_size: tokens::FONT_LG,
+            font: editor_font.clone().into(),
+            font_size: tokens::TEXT_SIZE_LG,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),
@@ -273,8 +273,8 @@ pub fn spawn_confirm_quit_dialog(world: &mut World) {
     world.spawn((
         Text::new("You have unsaved changes. Save all before quitting?"),
         TextFont {
-            font: editor_font.clone(),
-            font_size: tokens::FONT_SM,
+            font: editor_font.clone().into(),
+            font_size: tokens::TEXT_SIZE_SM,
             ..Default::default()
         },
         TextColor(tokens::TEXT_SECONDARY),
@@ -348,8 +348,8 @@ fn spawn_quit_button(
     world.spawn((
         Text::new(label.to_string()),
         TextFont {
-            font: editor_font,
-            font_size: tokens::FONT_MD,
+            font: editor_font.into(),
+            font_size: tokens::TEXT_SIZE,
             ..Default::default()
         },
         TextColor(tokens::TEXT_PRIMARY),

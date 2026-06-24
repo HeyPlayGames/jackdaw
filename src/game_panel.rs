@@ -203,7 +203,7 @@ pub fn game_panel_content() -> impl Bundle {
                         GamePanelIdleLabel,
                         Text::new("not playing"),
                         TextFont {
-                            font_size: tokens::FONT_SM,
+                            font_size: tokens::TEXT_SIZE_SM,
                             ..Default::default()
                         },
                         TextColor(tokens::TEXT_DISABLED),
@@ -284,7 +284,7 @@ fn game_mode_segment(
         children![(
             Text::new(label),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
@@ -309,7 +309,7 @@ fn game_no_signal_chip() -> impl Bundle {
         children![(
             Text::new("no signal"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_DISABLED),
@@ -334,7 +334,7 @@ fn game_playing_chip() -> impl Bundle {
         children![(
             Text::new("Playing, Shift+Esc to release"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(crate::default_style::CAPTURE_ACCENT),
@@ -374,7 +374,7 @@ fn game_play_input_button() -> impl Bundle {
         children![(
             Text::new("Play Input"),
             TextFont {
-                font_size: tokens::FONT_SM,
+                font_size: tokens::TEXT_SIZE_SM,
                 ..Default::default()
             },
             TextColor(tokens::TEXT_SECONDARY),
