@@ -41,8 +41,8 @@ impl MaterialExtension for OccludedExtension {
         if let Some(depth_stencil) = descriptor.depth_stencil.as_mut() {
             // Reversed-z: a fragment behind the stored surface has a
             // smaller depth value, so `Less` keeps only occluded pixels.
-            depth_stencil.depth_compare = CompareFunction::Less;
-            depth_stencil.depth_write_enabled = false;
+            depth_stencil.depth_compare = Some(CompareFunction::Less);
+            depth_stencil.depth_write_enabled = Some(false);
         }
         Ok(())
     }
@@ -388,6 +388,8 @@ pub(super) struct OccludedEdgeMesh;
 pub(super) struct EdgeOverlayAssets {
     front: [Handle<Mesh>; 3],
     occluded: [Handle<Mesh>; 3],
+    front_entities: [Entity; 3],
+    occluded_entities: [Entity; 3],
 }
 
 /// Per-state ribbon geometry accumulated for one frame.
@@ -399,12 +401,12 @@ struct EdgeRibbons {
     indices: Vec<u32>,
 }
 
-fn empty_edge_mesh() -> Mesh {
+fn placeholder_edge_mesh() -> Mesh {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, default());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, Vec::<[f32; 3]>::new());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, Vec::<[f32; 2]>::new());
-    mesh.insert_indices(Indices::U32(Vec::new()));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0, 0.0, 0.0]; 3]);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; 3]);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 0.0]; 3]);
+    mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
     mesh
 }
 
@@ -432,8 +434,11 @@ pub(super) fn setup_edge_overlay(
         default_style::EDIT_SELECTED_COLOR,
         default_style::EDIT_HOVER_COLOR,
     ];
-    let front: [Handle<Mesh>; 3] = std::array::from_fn(|_| meshes.add(empty_edge_mesh()));
-    let occluded_meshes: [Handle<Mesh>; 3] = std::array::from_fn(|_| meshes.add(empty_edge_mesh()));
+    let front: [Handle<Mesh>; 3] = std::array::from_fn(|_| meshes.add(placeholder_edge_mesh()));
+    let occluded_meshes: [Handle<Mesh>; 3] =
+        std::array::from_fn(|_| meshes.add(placeholder_edge_mesh()));
+    let mut front_entities = [Entity::PLACEHOLDER; 3];
+    let mut occluded_entities = [Entity::PLACEHOLDER; 3];
     for (i, color) in colors.iter().enumerate() {
         let front_mat = front_materials.add(FrontEdgeMaterial {
             base: StandardMaterial {
@@ -445,13 +450,16 @@ pub(super) fn setup_edge_overlay(
             },
             extension: EdgeOffsetExtension::default(),
         });
-        commands.spawn((
-            FrontEdgeMesh,
-            crate::EditorEntity,
-            Mesh3d(front[i].clone()),
-            MeshMaterial3d(front_mat),
-            Transform::default(),
-        ));
+        front_entities[i] = commands
+            .spawn((
+                FrontEdgeMesh,
+                crate::EditorEntity,
+                Mesh3d(front[i].clone()),
+                MeshMaterial3d(front_mat),
+                Transform::default(),
+                Visibility::Hidden,
+            ))
+            .id();
         let occluded_mat = occluded.add(OccludedHandleMaterial {
             base: StandardMaterial {
                 base_color: color.with_alpha(OCCLUDED_HANDLE_ALPHA),
@@ -463,17 +471,22 @@ pub(super) fn setup_edge_overlay(
             },
             extension: OccludedExtension::default(),
         });
-        commands.spawn((
-            OccludedEdgeMesh,
-            crate::EditorEntity,
-            Mesh3d(occluded_meshes[i].clone()),
-            MeshMaterial3d(occluded_mat),
-            Transform::default(),
-        ));
+        occluded_entities[i] = commands
+            .spawn((
+                OccludedEdgeMesh,
+                crate::EditorEntity,
+                Mesh3d(occluded_meshes[i].clone()),
+                MeshMaterial3d(occluded_mat),
+                Transform::default(),
+                Visibility::Hidden,
+            ))
+            .id();
     }
     commands.insert_resource(EdgeOverlayAssets {
         front,
         occluded: occluded_meshes,
+        front_entities,
+        occluded_entities,
     });
 }
 
@@ -482,6 +495,7 @@ pub(super) fn setup_edge_overlay(
 /// occluded mesh (depth test inverted) per state, so edges hold a constant
 /// on-screen width and read through occluding geometry like vertex handles.
 pub(super) fn update_edge_overlay(
+    mut commands: Commands,
     edit_mode: Res<EditMode>,
     brush_selection: Res<BrushSelection>,
     hover: Res<super::BrushFaceHover>,
@@ -588,11 +602,24 @@ pub(super) fn update_edge_overlay(
     }
 
     for (i, ribbons) in by_state.iter().enumerate() {
-        if let Some(mesh) = meshes.get_mut(&assets.front[i]) {
-            write_edge_mesh(mesh, ribbons);
+        let visible = !ribbons.positions.is_empty();
+        let visibility = if visible {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        commands.entity(assets.front_entities[i]).insert(visibility);
+        commands
+            .entity(assets.occluded_entities[i])
+            .insert(visibility);
+        if !visible {
+            continue;
         }
-        if let Some(mesh) = meshes.get_mut(&assets.occluded[i]) {
-            write_edge_mesh(mesh, ribbons);
+        if let Some(mut mesh) = meshes.get_mut(&assets.front[i]) {
+            write_edge_mesh(&mut mesh, ribbons);
+        }
+        if let Some(mut mesh) = meshes.get_mut(&assets.occluded[i]) {
+            write_edge_mesh(&mut mesh, ribbons);
         }
     }
 }
