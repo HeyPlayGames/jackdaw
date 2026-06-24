@@ -376,7 +376,7 @@ impl Plugin for EditorCorePlugin {
             Update,
             EditorInteractionSystems
                 .run_if(in_state(AppState::Editor))
-                .run_if(no_dialog_open.and(crate::live_edits_ui::stop_prompt_closed)),
+                .run_if(no_dialog_open.and_then(crate::live_edits_ui::stop_prompt_closed)),
         )
         .configure_sets(
             PostUpdate,

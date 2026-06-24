@@ -6,7 +6,7 @@ use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::window::SystemCursorIcon;
 use jackdaw_feathers::button::{ButtonClickEvent, ButtonSize, ButtonVariant, EditorButton};
-use jackdaw_feathers::tokens::{BORDER_RADIUS_MD, ICON_MD};
+use jackdaw_feathers::tokens::{BORDER_RADIUS_MD, ICON_MD_PX};
 
 use crate::EditorEntity;
 
@@ -85,8 +85,8 @@ fn jackdaw_link_button(image: Handle<Image>) -> impl Bundle {
         children![(
             ImageNode::new(image),
             Node {
-                width: Val::Px(ICON_MD),
-                height: Val::Px(ICON_MD),
+                width: Val::Px(ICON_MD_PX),
+                height: Val::Px(ICON_MD_PX),
                 ..default()
             },
         )],
